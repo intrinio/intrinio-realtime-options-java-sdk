@@ -1,0 +1,7 @@
+{
+	"apiKey": "",
+	"provider": "OPRA",
+	"symbols": [ "GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000" ],
+	"tradesOnly": true,
+	"numThreads": 4
+}
