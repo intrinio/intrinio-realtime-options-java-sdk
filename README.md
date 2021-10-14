@@ -149,7 +149,7 @@ public class SampleApp {
 
 ## Handling Quotes
 
-There are millions of options contracts, each with their own feed of activity.  We highly encourage you to make your trade, quote and open interest handlers has short as possible and follow a queue pattern so your app can handle the volume of activity options data has.
+There are millions of options contracts, each with their own feed of activity.  We highly encourage you to make your trade, quote, and open interest handlers has short as possible and follow a queue pattern so your app can handle the volume of activity options data has.
 
 ## Providers
 
