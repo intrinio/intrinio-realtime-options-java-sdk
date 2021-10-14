@@ -9,7 +9,7 @@ SDK for working with Intrinio's realtime options feed
 
 ## Installation
 
-Go to [Release](https://github.com/intrinio/intrinio-realtime-options-java-sdk), download the JAR, reference it in your project. The JAR contains dependencies necessary to the SDK.
+Go to [Release](https://github.com/intrinio/intrinio-realtime-options-java-sdk/releases/), download the JAR, reference it in your project. The JAR contains dependencies necessary to the SDK.
 
 ## Sample Project
 
@@ -168,7 +168,7 @@ public record Trade(String symbol, double price, long size, long totalVolume, do
 
 * **symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
 * **price** - the price in USD
-* **size** - the size of the `last` trade in hundreds (each contract is for 100 shares).
+* **size** - the size of the last trade in hundreds (each contract is for 100 shares).
 * **totalVolume** - The number of contracts traded so far today.
 * **timestamp** - a Unix timestamp (with microsecond precision)
 
@@ -184,7 +184,7 @@ public record Quote(QuoteType type, String symbol, double price, long size, doub
   *    **`bid`** - represents a bid type  
 * **symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
 * **price** - the price in USD
-* **size** - the size of the `last` ask or bid in hundreds (each contract is for 100 shares).
+* **size** - the size of the last ask or bid in hundreds (each contract is for 100 shares).
 * **timestamp** - a Unix timestamp (with microsecond precision)
 
 
