@@ -85,7 +85,11 @@ public record Trade(String symbol, double price, long size, long totalVolume, do
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = timeStampBuffer.getDouble();
 		
-		return new Trade(symbol, price, size, 0, timestamp);
+		ByteBuffer volumeBuffer = bytes.slice(42, 8);
+		volumeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		long totalVolume = volumeBuffer.getLong();
+		
+		return new Trade(symbol, price, size, totalVolume, timestamp);
 	}
 	
 }
