@@ -1,8 +1,9 @@
-package intrinio;
+package SampleApp;
 
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
+import intrinio.*;
 
 class TradeHandler implements OnTrade {
 	private final ConcurrentHashMap<String,Integer> symbols = new ConcurrentHashMap<String,Integer>();
@@ -108,6 +109,9 @@ public class SampleApp {
 		TradeHandler tradeHandler = new TradeHandler();
 		QuoteHandler quoteHandler = new QuoteHandler();
 		OpenInterestHandler openInterestHandler = new OpenInterestHandler();
+		//Config config = null; //You can either create a config class or default to using the intrinio/config.json file
+		//try {config = new Config("apiKeyHere", Provider.OPRA, null, null, false, 8);} catch (Exception e) {e.printStackTrace();}
+		//Client client = new Client(tradeHandler, quoteHandler, openInterestHandler, config);
 		Client client = new Client(tradeHandler, quoteHandler, openInterestHandler);
 		Timer timer = new Timer();
 		TimerTask task = new TimerTask() {
@@ -118,7 +122,7 @@ public class SampleApp {
 			}
 		};
 		timer.schedule(task, 10000, 10000);
-		client.join();
+		client.join(); //use channels configured in config
+		//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000"}); //manually specify channels
 	}
-
 }

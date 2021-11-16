@@ -1,5 +1,5 @@
 package intrinio;
 
-interface OnOpenInterest {
+public interface OnOpenInterest {
 	void onOpenInterest(OpenInterest oi);
 }

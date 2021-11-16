@@ -98,7 +98,7 @@ public class Client implements WebSocket.Listener {
 	private final long[] selfHealBackoffs = {1000, 30000, 60000, 300000, 600000};
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
-	private final Config config = Config.load();
+	private Config config;
 	private final int FirehoseSocketCount = 6;
 	private final LinkedBlockingDeque<byte[]> data = new LinkedBlockingDeque<>();
 	
@@ -112,7 +112,7 @@ public class Client implements WebSocket.Listener {
 	private OnTrade onTrade = (Trade trade) -> {};
 	private OnQuote onQuote = (Quote quote) -> {};
 	private OnOpenInterest onOpenInterest = (OpenInterest oi) -> {};
-	private Thread[] threads = new Thread[config.getNumThreads()];
+	private Thread[] threads;
 	private Lock[] dataBucketLocks;
 	private boolean isCancellationRequested = false;
 	private int socketCount;
@@ -629,6 +629,27 @@ public class Client implements WebSocket.Listener {
 		
 	public Client() {
 		try {
+			config = Config.load();
+			threads = new Thread[config.getNumThreads()];
+			socketCount = getWebSocketCount();
+			dataBucketLocks = new ReentrantLock[socketCount];
+			dataBuckets = new ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>>(socketCount);
+			for(int i = 0; i < socketCount; i++) {
+				dataBucketLocks[i] = new ReentrantLock();
+				dataBuckets.add(new LinkedBlockingDeque<Tuple<byte[], Boolean>>());
+			}				
+			this.initializeThreads();
+		} catch (Exception e) {
+			Client.Log("Initialization Failure. " + e.getMessage());
+		}
+		String token = this.getToken();
+		this.initializeWebSockets(token);
+	}
+	
+	public Client(Config config) {
+		try {
+			this.config = config;
+			threads = new Thread[config.getNumThreads()];
 			socketCount = getWebSocketCount();
 			dataBucketLocks = new ReentrantLock[socketCount];
 			dataBuckets = new ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>>(socketCount);
@@ -661,7 +682,25 @@ public class Client implements WebSocket.Listener {
 		this.onQuote = onQuote;
 		this.onOpenInterest = onOpenInterest;
 	}
+	
+	public Client(OnTrade onTrade, Config config){
+		this(config);
+		this.onTrade = onTrade;
+	}
 		
+	public Client(OnTrade onTrade, OnQuote onQuote, Config config){
+		this(config);
+		this.onTrade = onTrade;
+		this.onQuote = onQuote;
+	}
+		
+	public Client(OnTrade onTrade, OnQuote onQuote, OnOpenInterest onOpenInterest, Config config) {
+		this(config);
+		this.onTrade = onTrade;
+		this.onQuote = onQuote;
+		this.onOpenInterest = onOpenInterest;
+	}
+
 	public void join() {
 		while (!this.allReady()) {
 			try {
