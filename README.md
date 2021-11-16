@@ -5,7 +5,7 @@ SDK for working with Intrinio's realtime options feed
 
 ## Requirements
 
-- Java 7+
+- Java 14+
 
 ## Installation
 
