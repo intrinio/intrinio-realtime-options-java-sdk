@@ -92,18 +92,6 @@ record Token (String token, LocalDateTime date) {}
 
 record Channel (String symbol, boolean tradesOnly) {}
 
-interface OnOpenInterest {
-	void onOpenInterest(OpenInterest oi);
-}
-
-interface OnTrade {
-	void onTrade(Trade trade);
-}
-
-interface OnQuote {
-	void onQuote(Quote quote);
-}
-
 public class Client implements WebSocket.Listener {
 	private final String heartbeatMessage = "{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":null}";
 	private final String heartbeatResponse = "{\"topic\":\"phoenix\",\"ref\":null,\"payload\":{\"status\":\"ok\",\"response\":{}},\"event\":\"phx_reply\"}";

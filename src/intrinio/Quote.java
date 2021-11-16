@@ -6,12 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-enum QuoteType {
-	INVALID,
-	ASK,
-	BID
-}
-
 public record Quote(QuoteType type, String symbol, double price, long size, double timestamp) {
 	
 	public float getStrikePrice() {
