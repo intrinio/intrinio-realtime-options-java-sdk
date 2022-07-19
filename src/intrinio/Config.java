@@ -14,7 +14,6 @@ public class Config {
 	private Provider provider = Provider.NONE;
 	private String ipAddress;
 	private String[] symbols;
-	private boolean tradesOnly = true;
 	private int numThreads = 4;
 	
 	public Config(String apiKey, Provider provider, String ipAddress, String[] symbols, boolean tradesOnly, int numThreads) throws Exception {
@@ -22,7 +21,6 @@ public class Config {
 		this.provider = provider;
 		this.ipAddress = ipAddress;
 		this.symbols = symbols;
-		this.tradesOnly = tradesOnly;
 		this.numThreads = numThreads;
 		
 		if (this.apiKey.isBlank()) {
@@ -52,10 +50,6 @@ public class Config {
 		return symbols;
 	}
 
-	public boolean isTradesOnly() {
-		return tradesOnly;
-	}
-
 	public int getNumThreads() {
 		return numThreads;
 	}
@@ -66,7 +60,6 @@ public class Config {
 				this.provider,
 				this.ipAddress,
 				String.join(", ", this.symbols),
-				this.tradesOnly,
 				this.numThreads);
 	}
 
