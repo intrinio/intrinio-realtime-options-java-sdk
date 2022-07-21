@@ -68,6 +68,17 @@ public class SampleApp {
 		//try {config = new Config("apiKeyHere", Provider.OPRA, null, null, false, 8);} catch (Exception e) {e.printStackTrace();}
 		//Client client = new Client(config);
 		Client client = new Client();
+		try {
+			client.setOnTrade(tradeHandler);
+			client.setOnQuote(quoteHandler);
+			client.setOnOpenInterest(openInterestHandler);
+			client.setOnUnusualActivity(unusualActivityHandler);
+			client.start();
+			client.join(); //use channels configured in config
+			//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000"}); //manually specify channels
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		Timer timer = new Timer();
 		TimerTask task = new TimerTask() {
 			public void run() {
@@ -85,7 +96,5 @@ public class SampleApp {
 			}
 		};
 		timer.schedule(task, 10000, 10000);
-		client.join(); //use channels configured in config
-		//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000"}); //manually specify channels
 	}
 }

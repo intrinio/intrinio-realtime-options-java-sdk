@@ -16,7 +16,7 @@ public class Config {
 	private String[] symbols;
 	private int numThreads = 4;
 	
-	public Config(String apiKey, Provider provider, String ipAddress, String[] symbols, boolean tradesOnly, int numThreads) throws Exception {
+	public Config(String apiKey, Provider provider, String ipAddress, String[] symbols, int numThreads) throws Exception {
 		this.apiKey = apiKey;
 		this.provider = provider;
 		this.ipAddress = ipAddress;
@@ -55,11 +55,11 @@ public class Config {
 	}
 	
 	public String toString() {
-		return String.format("apiKey = %s, provider = %s, ipAddress = %s, symbols = %s, tradesOnly = %b, numThreads = %d",
+		return String.format("apiKey = %s, provider = %s, ipAddress = %s, symbols = %s, numThreads = %d",
 				this.apiKey,
 				this.provider,
 				this.ipAddress,
-				String.join(", ", this.symbols),
+				"[ " + String.join(", ", this.symbols) + " ]",
 				this.numThreads);
 	}
 

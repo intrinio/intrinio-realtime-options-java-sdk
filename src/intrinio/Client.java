@@ -345,6 +345,7 @@ public class Client implements WebSocket.Listener {
 		HttpURLConnection con;
 		try {
 			con = (HttpURLConnection) url.openConnection();
+			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv2.0");
 		} catch (IOException e) {
 			Client.Log("Authorization Failure. Please check your network connection. " + e.getMessage());
 			return false;
@@ -610,32 +611,40 @@ public class Client implements WebSocket.Listener {
 	}
 		
 	private void _join(String symbol) {
-		if (channels.add(symbol)) {
-			StringBuilder sb = new StringBuilder();
-			LinkedList<String> list = new LinkedList<String>();
-			if (useOnTrade) {
-				sb.append(",\"trade_data\":\"true\"");
-				list.add("trade");
+		if (((symbol == "lobby") || (symbol == "lobby_trades_only")) &&
+				((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE))) {
+			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
+		} else if (((symbol != "lobby") && (symbol != "lobby_trades_only")) &&
+	            ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE))) {
+			Client.Log("'FIREHOSE' providers may only join the lobby channel");
+		} else {
+			if (channels.add(symbol)) {
+				StringBuilder sb = new StringBuilder();
+				LinkedList<String> list = new LinkedList<String>();
+				if (useOnTrade) {
+					sb.append(",\"trade_data\":\"true\"");
+					list.add("trade");
+				}
+	            if (useOnQuote) {
+	            	sb.append(",\"quote_data\":\"true\"");
+	            	list.add("quote");
+	            }
+	            if (useOnOpenInterest) {
+	            	sb.append(",\"open_interest_data\":\"true\"");
+	            	list.add("open interest");
+	            }
+	            if (useOnUnusualActivity) {
+	            	sb.append(",\"unusual_activity_data\":\"true\"");
+	            	list.add("unusual activity");
+	            }
+	            String subscriptionSelection = sb.toString();
+	            String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
+	            for (WebSocketState wss : this.wsStates.values()) {
+	            	subscriptionSelection = String.join(", ", list);
+	                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wss.getIndex(), symbol, subscriptionSelection);
+	    			wss.getWebSocket().sendText(message, true);
+	            }            
 			}
-            if (useOnQuote) {
-            	sb.append(",\"quote_data\":\"true\"");
-            	list.add("quote");
-            }
-            if (useOnOpenInterest) {
-            	sb.append(",\"open_interest_data\":\"true\"");
-            	list.add("open interest");
-            }
-            if (useOnUnusualActivity) {
-            	sb.append(",\"unusual_activity_data\":\"true\"");
-            	list.add("unusual activity");
-            }
-            String subscriptionSelection = sb.toString();
-            String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
-            for (WebSocketState wss : this.wsStates.values()) {
-            	subscriptionSelection = String.join(", ", list);
-                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wss.getIndex(), symbol, subscriptionSelection);
-    			wss.getWebSocket().sendText(message, true);
-            }            
 		}
 	}
 		
@@ -657,7 +666,7 @@ public class Client implements WebSocket.Listener {
 		
 	public Client() {
 		try {
-			config = Config.load();
+			this.config = Config.load();
 			threads = new Thread[config.getNumThreads()];
 			socketCount = getWebSocketCount();
 			dataBucketLocks = new ReentrantLock[socketCount];
@@ -725,7 +734,7 @@ public class Client implements WebSocket.Listener {
 	public void setOnUnusualActivity(OnUnusualActivity onUnusualActivity) throws Exception {
 		if (this.isStarted) {
 			throw new Exception("You must set all callbacks prior to calling 'start'");
-		} else if (this.useOnTrade) {
+		} else if (this.useOnUnusualActivity) {
 			throw new Exception("'OnUnusualActivity' callback has already been set");
 		} else {
 			this.onUnusualActivity = onUnusualActivity;
@@ -734,38 +743,65 @@ public class Client implements WebSocket.Listener {
 	}
 
 	public void join() {
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
-		String[] symbols = config.getSymbols();
-		for (String symbol : symbols) {
-			if (!this.channels.contains(symbol)) {
-				this._join(symbol);
-			}
-		}
-	}
-		
-	public void join(String symbol) {
-		if (!symbol.isBlank()) {
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
 			while (!this.allReady()) {
 				try {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) {}
 			}
-			if (!channels.contains(symbol)) this._join(symbol);
+			String[] symbols = config.getSymbols();
+			for (String symbol : symbols) {
+				if (!this.channels.contains(symbol)) {
+					this._join(symbol);
+				}
+			}
+		}
+	}
+		
+	public void join(String symbol) {
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
+			if (!symbol.isBlank()) {
+				while (!this.allReady()) {
+					try {
+						Thread.sleep(1000);
+					} catch (InterruptedException e) {}
+				}
+				if (!channels.contains(symbol)) this._join(symbol);
+			}
 		}
 	}
 		
 	public void join(String[] symbols) {
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
+			while (!this.allReady()) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {}
+			}
+			for (String symbol : symbols) {
+				if (!channels.contains(symbol)) this._join(symbol);
+			}
 		}
-		for (String symbol : symbols) {
-			if (!channels.contains(symbol)) this._join(symbol);
+	}
+	
+	public void joinLobby() {
+		if ((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE)) {
+			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
+		} else if (channels.contains("lobby")) {
+			Client.Log("This client has already joined the lobby channel");
+		} else {
+			while (!this.allReady()) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {}
+			}
+			this._join("lobby");
 		}
 	}
 		
@@ -785,6 +821,10 @@ public class Client implements WebSocket.Listener {
 		for (String symbol : symbols) {
 			if (channels.contains(symbol)) this._leave(symbol);
 		}
+	}
+	
+	public void leaveLobby() {
+		if (channels.contains("lobby")) this.leave("lobby");
 	}
 	
 	public void start() throws Exception {
