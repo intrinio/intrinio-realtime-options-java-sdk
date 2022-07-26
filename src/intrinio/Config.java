@@ -59,7 +59,7 @@ public class Config {
 				this.apiKey,
 				this.provider,
 				this.ipAddress,
-				"[ " + String.join(", ", this.symbols) + " ]",
+				(this.symbols == null ? "[]" : "[ " + String.join(", ", this.symbols) + " ]"),
 				this.numThreads);
 	}
 
@@ -73,6 +73,7 @@ public class Config {
 			System.out.println(config);
 			return config;
 		} catch (Exception e) {
+			e.printStackTrace();
 			return null;
 		}
 	}

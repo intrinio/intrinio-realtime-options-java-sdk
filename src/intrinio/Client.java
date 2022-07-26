@@ -134,7 +134,6 @@ public class Client implements WebSocket.Listener {
 		while (!this.isCancellationRequested) {
 			try {
 				Thread.sleep(20000);
-				Client.Log("Sending heartbeat");
 				wsLock.readLock().lock();
 				try {
 					for (WebSocketState wss : wsStates.values()) {
