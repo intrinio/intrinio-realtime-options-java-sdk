@@ -90,8 +90,6 @@ class WebSocketState {
 
 record Token (String token, LocalDateTime date) {}
 
-record Channel (String symbol, boolean tradesOnly) {}
-
 public class Client implements WebSocket.Listener {
 	private final String heartbeatMessage = "{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":null}";
 	private final String heartbeatResponse = "{\"topic\":\"phoenix\",\"ref\":null,\"payload\":{\"status\":\"ok\",\"response\":{}},\"event\":\"phx_reply\"}";
@@ -107,15 +105,21 @@ public class Client implements WebSocket.Listener {
 	private Hashtable<Integer, Integer> wsIndices = new Hashtable<Integer, Integer>();
 	private AtomicLong dataMsgCount = new AtomicLong(0l);
 	private AtomicLong textMsgCount = new AtomicLong(0l);
-	private HashSet<Channel> channels = new HashSet<Channel>();
+	private HashSet<String> channels = new HashSet<String>();
 	private ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>> dataBuckets;
 	private OnTrade onTrade = (Trade trade) -> {};
+	private boolean useOnTrade = false;
 	private OnQuote onQuote = (Quote quote) -> {};
+	private boolean useOnQuote = false;
 	private OnOpenInterest onOpenInterest = (OpenInterest oi) -> {};
+	private boolean useOnOpenInterest = false;
+	private OnUnusualActivity onUnusualActivity = (UnusualActivity ua) -> {};
+	private boolean useOnUnusualActivity = false;
 	private Thread[] threads;
 	private Lock[] dataBucketLocks;
 	private boolean isCancellationRequested = false;
 	private int socketCount;
+	private boolean isStarted = false;
 	
 	private class Tuple<X, Y> { 
 		  public final X x; 
@@ -130,7 +134,6 @@ public class Client implements WebSocket.Listener {
 		while (!this.isCancellationRequested) {
 			try {
 				Thread.sleep(20000);
-				Client.Log("Sending heartbeat");
 				wsLock.readLock().lock();
 				try {
 					for (WebSocketState wss : wsStates.values()) {
@@ -191,27 +194,31 @@ public class Client implements WebSocket.Listener {
 						buffer.position(0);
 						byte type = datum[offset + 21];						
 						ByteBuffer offsetBuffer;
-						switch (type) {
-						case 0:
-							offsetBuffer = buffer.slice(offset, 50);
-							Trade trade = Trade.parse(offsetBuffer);
-							onTrade.onTrade(trade);
-							offset += 50;
-							break;
-						case 1:
-						case 2:
+						if (type == 1 || type == 2) {
 							offsetBuffer = buffer.slice(offset, 42);
 							Quote quote = Quote.parse(offsetBuffer);
-							onQuote.onQuote(quote);
 							offset += 42;
-							break;
-						case 3:
+							if (useOnQuote) onQuote.onQuote(quote);
+						}
+						else if (type == 0) {
+							offsetBuffer = buffer.slice(offset, 50);
+							Trade trade = Trade.parse(offsetBuffer);
+							offset += 50;
+							if (useOnTrade) onTrade.onTrade(trade);
+						}
+						else if (type > 3) {
+							offsetBuffer = buffer.slice(offset, 55);
+							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
+							offset += 55;
+							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
+						}
+						else if (type == 3) {
 							offsetBuffer = buffer.slice(offset, 34);
 							OpenInterest oi = OpenInterest.parse(offsetBuffer);
-							onOpenInterest.onOpenInterest(oi);
 							offset += 34;
-							break;
-						default:
+							if (useOnOpenInterest) onOpenInterest.onOpenInterest(oi);
+						}
+						else {
 							Client.Log("Error parsing multi-part message. Type is %d", type);							
 							i = count;
 						}
@@ -337,6 +344,7 @@ public class Client implements WebSocket.Listener {
 		HttpURLConnection con;
 		try {
 			con = (HttpURLConnection) url.openConnection();
+			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv2.0");
 		} catch (IOException e) {
 			Client.Log("Authorization Failure. Please check your network connection. " + e.getMessage());
 			return false;
@@ -412,16 +420,30 @@ public class Client implements WebSocket.Listener {
 		
 	private void onWebSocketConnected (WebSocket ws, WebSocketState wsState) {
 		if (!channels.isEmpty()) {
-			String lastOnly;
 			String message;
-			for (Channel channel : channels) {
-				if (channel.tradesOnly()) {
-					lastOnly = "true";
-				} else {
-					lastOnly = "false";
+			for (String channel : channels) {
+				StringBuilder sb = new StringBuilder();
+				LinkedList<String> list = new LinkedList<String>();
+				if (useOnTrade) {
+					sb.append(",\"trade_data\":\"true\"");
+					list.add("trade");
 				}
-				message = "{\"topic\":\"options:" + channel.symbol() + "\",\"event\":\"phx_join\",\"last_only\":\"" + lastOnly+ "\",\"payload\":{},\"ref\":null}";
-				Client.Log("Websocket %d - Joining channel: %s (trades only = %s)", wsState.getIndex(), channel.symbol(), lastOnly);
+                if (useOnQuote) {
+                	sb.append(",\"quote_data\":\"true\"");
+                	list.add("quote");
+                }
+                if (useOnOpenInterest) {
+                	sb.append(",\"open_interest_data\":\"true\"");
+                	list.add("open interest");
+                }
+                if (useOnUnusualActivity) {
+                	sb.append(",\"unusual_activity_data\":\"true\"");
+                	list.add("unusual activity");
+                }
+                String subscriptionSelection = sb.toString();
+                message = "{\"topic\":\"options:" + channel + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
+                subscriptionSelection = String.join(", ", list);
+                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wsState.getIndex(), channel, subscriptionSelection);
 				wsState.getWebSocket().sendText(message, true);
 			}
 		}
@@ -587,36 +609,50 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 		
-	private void _join(String symbol, boolean tradesOnly) {
-		String lastOnly;
-		if (tradesOnly) {
-			lastOnly = "true";
+	private void _join(String symbol) {
+		if (((symbol == "lobby") || (symbol == "lobby_trades_only")) &&
+				((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE))) {
+			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
+		} else if (((symbol != "lobby") && (symbol != "lobby_trades_only")) &&
+	            ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE))) {
+			Client.Log("'FIREHOSE' providers may only join the lobby channel");
 		} else {
-			lastOnly = "false";
-		}
-		Channel channel = new Channel(symbol, tradesOnly);
-		if (channels.add(channel)) {
-			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\",\"last_only\":\"" + lastOnly + "\",\"payload\":{},\"ref\":null}";
-			for (WebSocketState wsState : this.wsStates.values()) {
-				Client.Log("Websocket %d - Joining channel: %s (trades only = %s)", wsState.getIndex(), symbol, lastOnly);
-				wsState.getWebSocket().sendText(message, true);
+			if (channels.add(symbol)) {
+				StringBuilder sb = new StringBuilder();
+				LinkedList<String> list = new LinkedList<String>();
+				if (useOnTrade) {
+					sb.append(",\"trade_data\":\"true\"");
+					list.add("trade");
+				}
+	            if (useOnQuote) {
+	            	sb.append(",\"quote_data\":\"true\"");
+	            	list.add("quote");
+	            }
+	            if (useOnOpenInterest) {
+	            	sb.append(",\"open_interest_data\":\"true\"");
+	            	list.add("open interest");
+	            }
+	            if (useOnUnusualActivity) {
+	            	sb.append(",\"unusual_activity_data\":\"true\"");
+	            	list.add("unusual activity");
+	            }
+	            String subscriptionSelection = sb.toString();
+	            String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
+	            for (WebSocketState wss : this.wsStates.values()) {
+	            	subscriptionSelection = String.join(", ", list);
+	                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wss.getIndex(), symbol, subscriptionSelection);
+	    			wss.getWebSocket().sendText(message, true);
+	            }            
 			}
 		}
 	}
 		
-	private void _leave(String symbol, boolean tradesOnly) {
-		String lastOnly;
-		if (tradesOnly) {
-			lastOnly = "true";
-		} else {
-			lastOnly = "false";
-		}
-		Channel channel = new Channel(symbol, tradesOnly);
-		if (channels.remove(channel)) {
-			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_leave\",\"last_only\":\"" + lastOnly + "\",\"payload\":{},\"ref\":null}";
-			for (WebSocketState wsState : this.wsStates.values()) {
-				Client.Log("Websocket %d - Leaving channel: %s (trades only = %s)", wsState.getIndex(), symbol, lastOnly);
-				wsState.getWebSocket().sendText(message, true);
+	private void _leave(String symbol) {
+		if (channels.remove(symbol)) {
+			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_leave\",\"payload\":{},\"ref\":null}";
+			for (WebSocketState wss : this.wsStates.values()) {
+				Client.Log("Websocket %d - Leaving channel: %s", wss.getIndex(), symbol);
+				wss.getWebSocket().sendText(message, true);
 			}
 		}
 	}
@@ -629,7 +665,7 @@ public class Client implements WebSocket.Listener {
 		
 	public Client() {
 		try {
-			config = Config.load();
+			this.config = Config.load();
 			threads = new Thread[config.getNumThreads()];
 			socketCount = getWebSocketCount();
 			dataBucketLocks = new ReentrantLock[socketCount];
@@ -642,8 +678,6 @@ public class Client implements WebSocket.Listener {
 		} catch (Exception e) {
 			Client.Log("Initialization Failure. " + e.getMessage());
 		}
-		String token = this.getToken();
-		this.initializeWebSockets(token);
 	}
 	
 	public Client(Config config) {
@@ -661,116 +695,144 @@ public class Client implements WebSocket.Listener {
 		} catch (Exception e) {
 			Client.Log("Initialization Failure. " + e.getMessage());
 		}
-		String token = this.getToken();
-		this.initializeWebSockets(token);
-	}
-		
-	public Client(OnTrade onTrade){
-		this();
-		this.onTrade = onTrade;
-	}
-		
-	public Client(OnTrade onTrade, OnQuote onQuote){
-		this();
-		this.onTrade = onTrade;
-		this.onQuote = onQuote;
-	}
-		
-	public Client(OnTrade onTrade, OnQuote onQuote, OnOpenInterest onOpenInterest) {
-		this();
-		this.onTrade = onTrade;
-		this.onQuote = onQuote;
-		this.onOpenInterest = onOpenInterest;
 	}
 	
-	public Client(OnTrade onTrade, Config config){
-		this(config);
-		this.onTrade = onTrade;
+	public void setOnTrade(OnTrade onTrade) throws Exception {
+		if (this.isStarted) {
+			throw new Exception("You must set all callbacks prior to calling 'start'");
+		} else if (this.useOnTrade) {
+			throw new Exception("'OnTrade' callback has already been set");
+		} else {
+			this.onTrade = onTrade;
+			this.useOnTrade = true;
+		}
 	}
-		
-	public Client(OnTrade onTrade, OnQuote onQuote, Config config){
-		this(config);
-		this.onTrade = onTrade;
-		this.onQuote = onQuote;
+	
+	public void setOnQuote(OnQuote onQuote) throws Exception {
+		if (this.isStarted) {
+			throw new Exception("You must set all callbacks prior to calling 'start'");
+		} else if (this.useOnQuote) {
+			throw new Exception("'OnQuote' callback has already been set");
+		} else {
+			this.onQuote = onQuote;
+			this.useOnQuote = true;
+		}
 	}
-		
-	public Client(OnTrade onTrade, OnQuote onQuote, OnOpenInterest onOpenInterest, Config config) {
-		this(config);
-		this.onTrade = onTrade;
-		this.onQuote = onQuote;
-		this.onOpenInterest = onOpenInterest;
+	
+	public void setOnOpenInterest(OnOpenInterest onOpenInterest) throws Exception {
+		if (this.isStarted) {
+			throw new Exception("You must set all callbacks prior to calling 'start'");
+		} else if (this.useOnOpenInterest) {
+			throw new Exception("'OnOpenInterest' callback has already been set");
+		} else {
+			this.onOpenInterest = onOpenInterest;
+			this.useOnOpenInterest = true;
+		}
+	}
+	
+	public void setOnUnusualActivity(OnUnusualActivity onUnusualActivity) throws Exception {
+		if (this.isStarted) {
+			throw new Exception("You must set all callbacks prior to calling 'start'");
+		} else if (this.useOnUnusualActivity) {
+			throw new Exception("'OnUnusualActivity' callback has already been set");
+		} else {
+			this.onUnusualActivity = onUnusualActivity;
+			this.useOnUnusualActivity = true;
+		}
 	}
 
 	public void join() {
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
-		String[] symbols = config.getSymbols();
-		boolean tradesOnly = config.isTradesOnly();
-		for (String symbol : symbols) {
-			if (!this.channels.contains(new Channel(symbol, tradesOnly))) {
-				this._join(symbol, tradesOnly);
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
+			while (!this.allReady()) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {}
+			}
+			String[] symbols = config.getSymbols();
+			for (String symbol : symbols) {
+				if (!this.channels.contains(symbol)) {
+					this._join(symbol);
+				}
 			}
 		}
 	}
 		
-	public void join(String symbol, boolean tradesOnly) {
-		boolean t = tradesOnly || config.isTradesOnly();
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
-		if (!this.channels.contains(new Channel(symbol, tradesOnly))) {
-			this._join(symbol, t);
-		}
-	}
-		
 	public void join(String symbol) {
-		this.join(symbol, false);
-	}
-		
-	public void join(String[] symbols, boolean tradesOnly) {
-		boolean t = tradesOnly || config.isTradesOnly();
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
-		for (String symbol : symbols) {
-			if (!this.channels.contains(new Channel(symbol, t))) {
-				this._join(symbol, t);
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
+			if (!symbol.isBlank()) {
+				while (!this.allReady()) {
+					try {
+						Thread.sleep(1000);
+					} catch (InterruptedException e) {}
+				}
+				if (!channels.contains(symbol)) this._join(symbol);
 			}
 		}
 	}
 		
 	public void join(String[] symbols) {
-		this.join(symbols, false);
+		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
+			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
+		} else {
+			while (!this.allReady()) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {}
+			}
+			for (String symbol : symbols) {
+				if (!channels.contains(symbol)) this._join(symbol);
+			}
+		}
+	}
+	
+	public void joinLobby() {
+		if ((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE)) {
+			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
+		} else if (channels.contains("lobby")) {
+			Client.Log("This client has already joined the lobby channel");
+		} else {
+			while (!this.allReady()) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {}
+			}
+			this._join("lobby");
+		}
 	}
 		
 	public void leave() {
-		for (Channel channel : this.channels) {
-			this._leave(channel.symbol(), channel.tradesOnly());
+		for (String channel : this.channels) {
+			this._leave(channel);
 		}
 	}
 		
 	public void leave(String symbol) {
-		for (Channel channel : this.channels) {
-			if (channel.symbol() == symbol) {
-				this._leave(symbol, channel.tradesOnly());
-			}
+		if (!symbol.isBlank()) {
+			if (channels.contains(symbol)) this._leave(symbol);
 		}
 	}
 		
 	public void leave(String[] symbols) {
 		for (String symbol : symbols) {
-			for (Channel channel : this.channels) {
-				if (channel.symbol() == symbol) {
-					this._leave(symbol, channel.tradesOnly());
-				}
-			}
+			if (channels.contains(symbol)) this._leave(symbol);
+		}
+	}
+	
+	public void leaveLobby() {
+		if (channels.contains("lobby")) this.leave("lobby");
+	}
+	
+	public void start() throws Exception {
+		if (!(useOnTrade || useOnQuote || useOnOpenInterest || useOnUnusualActivity)) {
+			throw new Exception("You must set at least one callback method before starting.");
+		} else {
+			String token = this.getToken();
+			this.initializeWebSockets(token);
+			this.isStarted = true;
 		}
 	}
 		

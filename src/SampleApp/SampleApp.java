@@ -2,103 +2,57 @@ package SampleApp;
 
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import intrinio.*;
 
 class TradeHandler implements OnTrade {
-	private final ConcurrentHashMap<String,Integer> symbols = new ConcurrentHashMap<String,Integer>();
-	private int maxTradeCount = 0;
-	private Trade maxTrade;
-	
-	public int getMaxTradeCount() {
-		return maxTradeCount;
-	}
 
-	public Trade getMaxTrade() {
-		return maxTrade;
-	}
+	public AtomicInteger tradeCount = new AtomicInteger(0);
 	
 	public void onTrade(Trade trade) {
-		symbols.compute(trade.symbol(), (String key, Integer value) -> {
-			if (value == null) {
-				if (maxTradeCount == 0) {
-					maxTradeCount = 1;
-					maxTrade = trade;
-				}
-				return 1;
-			} else {
-				if (value + 1 > maxTradeCount) {
-					maxTradeCount = value + 1;
-					maxTrade = trade;
-				}
-				return value + 1;
-			}
-		});
-	}
-	
-	public void tryLog() {
-		if (maxTradeCount > 0) {
-			Client.Log("Most active trade symbol: %s (%d updates)", maxTrade.symbol(), maxTradeCount);
-			Client.Log("%s - Trade (price = %f, size = %d, isPut = %b, isCall = %b, exp = %s)",
-					maxTrade.symbol(),
-					maxTrade.price(),
-					maxTrade.size(),
-					maxTrade.isPut(),
-					maxTrade.isCall(),
-					maxTrade.getExpirationDate().toString());
-		}
+		tradeCount.incrementAndGet();
 	}
 }
 
 class QuoteHandler implements OnQuote {
-	private final ConcurrentHashMap<String,Integer> symbols = new ConcurrentHashMap<String,Integer>();
-	private int maxQuoteCount = 0;
-	private Quote maxQuote;
-	
-	public int getMaxQuoteCount() {
-		return maxQuoteCount;
-	}
-
-	public Quote getMaxQuote() {
-		return maxQuote;
-	}
+	public AtomicInteger askCount = new AtomicInteger(0);
+	public AtomicInteger bidCount = new AtomicInteger(0);
 	
 	public void onQuote(Quote quote) {
-		symbols.compute(quote.symbol() + ":" + quote.type(), (String key, Integer value) -> {
-			if (value == null) {
-				if (maxQuoteCount == 0) {
-					maxQuoteCount = 1;
-					maxQuote = quote;
-				}
-				return 1;
-			} else {
-				if (value + 1 > maxQuoteCount) {
-					maxQuoteCount = value + 1;
-					maxQuote = quote;
-				}
-				return value + 1;
-			}
-		});
-	}
-	
-	public void tryLog() {
-		if (maxQuoteCount > 0) {
-			Client.Log("Most active quote symbol: %s:%s (%d updates)", maxQuote.symbol(), maxQuote.type(), maxQuoteCount);
-			Client.Log("%s - Quote (type = %s, price = %f, size = %d, isPut = %b, isCall = %b, exp = %s)",
-					maxQuote.symbol(),
-					maxQuote.type(),
-					maxQuote.price(),
-					maxQuote.size(),
-					maxQuote.isPut(),
-					maxQuote.isCall(),
-					maxQuote.getExpirationDate().toString());
+		if (quote.type() == QuoteType.ASK) {
+			askCount.incrementAndGet();
+		} else if (quote.type() == QuoteType.BID) {
+			bidCount.incrementAndGet();
+		} else {
+			Client.Log("Sample App - Invalid quote type detected: %s", quote.type().toString());
 		}
 	}
 }
 
 class OpenInterestHandler implements OnOpenInterest {
+	public AtomicInteger oiCount = new AtomicInteger(0);
+	
 	public void onOpenInterest(OpenInterest oi) {
-		Client.Log("Open Interest (%s) = %d", oi.symbol(), oi.openInterest());
+		oiCount.incrementAndGet();
+	}
+}
+
+class UnusualActivityHandler implements OnUnusualActivity {
+	public AtomicInteger blockCount = new AtomicInteger(0);
+	public AtomicInteger sweepCount = new AtomicInteger(0);
+	public AtomicInteger largeTradeCount = new AtomicInteger(0);
+	
+	public void onUnusualActivity(UnusualActivity ua) {
+		if (ua.type() == UnusualActivityType.BLOCK) {
+			blockCount.incrementAndGet();
+		} else if (ua.type() == UnusualActivityType.SWEEP) {
+			sweepCount.incrementAndGet();
+		} else if (ua.type() == UnusualActivityType.LARGE) {
+			largeTradeCount.incrementAndGet();
+		} else {
+			Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+		}
 	}
 }
 
@@ -106,23 +60,74 @@ public class SampleApp {
 	
 	public static void main(String[] args) {
 		Client.Log("Starting sample app");
+		
+		// Create only the handlers/callbacks that you need
+		// These will get registered below
 		TradeHandler tradeHandler = new TradeHandler();
 		QuoteHandler quoteHandler = new QuoteHandler();
 		OpenInterestHandler openInterestHandler = new OpenInterestHandler();
-		//Config config = null; //You can either create a config class or default to using the intrinio/config.json file
-		//try {config = new Config("apiKeyHere", Provider.OPRA, null, null, false, 8);} catch (Exception e) {e.printStackTrace();}
-		//Client client = new Client(tradeHandler, quoteHandler, openInterestHandler, config);
-		Client client = new Client(tradeHandler, quoteHandler, openInterestHandler);
+		UnusualActivityHandler unusualActivityHandler = new UnusualActivityHandler();
+		
+		// You can either create a config class or default to using the intrinio/config.json file
+		//Config config = null;
+		//try {config = new Config("apiKeyHere", Provider.OPRA, null, null, 8);} catch (Exception e) {e.printStackTrace();}
+		//Client client = new Client(config);
+		Client client = new Client();
+		
+		// Register a callback for a graceful shutdown
+		Runtime.getRuntime().addShutdownHook(new Thread( new Runnable() {
+			public void run() {
+				Client.Log("Stopping sample app");
+				client.stop();
+			}
+		}));
+		
+		try {
+			// Register only the callbacks that you want.
+			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
+			client.setOnTrade(tradeHandler);
+			//client.setOnQuote(quoteHandler);
+			//client.setOnOpenInterest(openInterestHandler);
+			client.setOnUnusualActivity(unusualActivityHandler);
+			
+			// Start the client
+			client.start();
+			
+			// Use this to subscribe to a static list of symbols (option contracts) provided in config.json
+			//client.join();
+			
+			// Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
+			//client.joinLobby();
+
+			// Use this to subscribe, dynamically, to an option chain (all option contracts for a given underlying symbol).
+			//client.join("AAPL");
+
+			// Use this to subscribe, dynamically, to a specific option contract.
+			//client.join("AAP___230616P00250000");
+
+			// Use this to subscribe, dynamically, a list of specific option contracts or option chains.
+			//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000", "TSLA"});
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
 		Timer timer = new Timer();
 		TimerTask task = new TimerTask() {
 			public void run() {
 				Client.Log(client.getStats());
-				tradeHandler.tryLog();
-				quoteHandler.tryLog();
+				String appStats = String.format(
+						"Messages (Trade = %d, Ask = %d, Bid = %d, Open Interest = %d, Block = %d, Sweep = %d, Large = %d)",
+						tradeHandler.tradeCount.get(),
+						quoteHandler.askCount.get(),
+						quoteHandler.bidCount.get(),
+						openInterestHandler.oiCount.get(),
+						unusualActivityHandler.blockCount.get(),
+						unusualActivityHandler.sweepCount.get(),
+						unusualActivityHandler.largeTradeCount.get());
+				Client.Log(appStats);
 			}
 		};
 		timer.schedule(task, 10000, 10000);
-		client.join(); //use channels configured in config
-		//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000"}); //manually specify channels
 	}
 }
