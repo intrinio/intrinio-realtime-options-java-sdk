@@ -58,11 +58,11 @@ class QuoteHandler implements OnQuote {
 	}
 }
 
-class OpenInterestHandler implements OnOpenInterest {
+class RefreshHandler implements OnRefresh {
 	public AtomicInteger oiCount = new AtomicInteger(0);
 	
-	public void onOpenInterest(OpenInterest oi) {
-		oiCount.incrementAndGet();
+	public void onRefresh(Refresh r) {
+		rCount.incrementAndGet();
 	}
 }
 

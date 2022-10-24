@@ -30,11 +30,11 @@ class QuoteHandler implements OnQuote {
 	}
 }
 
-class OpenInterestHandler implements OnOpenInterest {
-	public AtomicInteger oiCount = new AtomicInteger(0);
+class RefreshHandler implements OnRefresh {
+	public AtomicInteger rCount = new AtomicInteger(0);
 	
-	public void onOpenInterest(OpenInterest oi) {
-		oiCount.incrementAndGet();
+	public void onRefresh(Refresh r) {
+		rCount.incrementAndGet();
 	}
 }
 
@@ -65,7 +65,7 @@ public class SampleApp {
 		// These will get registered below
 		TradeHandler tradeHandler = new TradeHandler();
 		QuoteHandler quoteHandler = new QuoteHandler();
-		OpenInterestHandler openInterestHandler = new OpenInterestHandler();
+		RefreshHandler refreshHandler = new RefreshHandler();
 		UnusualActivityHandler unusualActivityHandler = new UnusualActivityHandler();
 		
 		// You can either create a config class or default to using the intrinio/config.json file
@@ -87,7 +87,7 @@ public class SampleApp {
 			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
 			client.setOnTrade(tradeHandler);
 			//client.setOnQuote(quoteHandler);
-			//client.setOnOpenInterest(openInterestHandler);
+			//client.setOnRefresh(refreshHandler);
 			client.setOnUnusualActivity(unusualActivityHandler);
 			
 			// Start the client
@@ -121,7 +121,7 @@ public class SampleApp {
 						tradeHandler.tradeCount.get(),
 						quoteHandler.askCount.get(),
 						quoteHandler.bidCount.get(),
-						openInterestHandler.oiCount.get(),
+						refreshHandler.rCount.get(),
 						unusualActivityHandler.blockCount.get(),
 						unusualActivityHandler.sweepCount.get(),
 						unusualActivityHandler.largeTradeCount.get());

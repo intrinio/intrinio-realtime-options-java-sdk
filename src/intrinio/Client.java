@@ -111,8 +111,8 @@ public class Client implements WebSocket.Listener {
 	private boolean useOnTrade = false;
 	private OnQuote onQuote = (Quote quote) -> {};
 	private boolean useOnQuote = false;
-	private OnOpenInterest onOpenInterest = (OpenInterest oi) -> {};
-	private boolean useOnOpenInterest = false;
+	private OnRefresh onRefresh = (Refresh r) -> {};
+	private boolean useOnRefresh = false;
 	private OnUnusualActivity onUnusualActivity = (UnusualActivity ua) -> {};
 	private boolean useOnUnusualActivity = false;
 	private Thread[] threads;
@@ -214,9 +214,9 @@ public class Client implements WebSocket.Listener {
 						}
 						else if (type == 3) {
 							offsetBuffer = buffer.slice(offset, 34);
-							OpenInterest oi = OpenInterest.parse(offsetBuffer);
+							Refresh r = Refresh.parse(offsetBuffer);
 							offset += 34;
-							if (useOnOpenInterest) onOpenInterest.onOpenInterest(oi);
+							if (useOnRefresh) onRefresh.onRefresh(r);
 						}
 						else {
 							Client.Log("Error parsing multi-part message. Type is %d", type);							
@@ -432,7 +432,7 @@ public class Client implements WebSocket.Listener {
                 	sb.append(",\"quote_data\":\"true\"");
                 	list.add("quote");
                 }
-                if (useOnOpenInterest) {
+                if (useOnRefresh) {
                 	sb.append(",\"open_interest_data\":\"true\"");
                 	list.add("open interest");
                 }
@@ -628,7 +628,7 @@ public class Client implements WebSocket.Listener {
 	            	sb.append(",\"quote_data\":\"true\"");
 	            	list.add("quote");
 	            }
-	            if (useOnOpenInterest) {
+	            if (useOnRefresh) {
 	            	sb.append(",\"open_interest_data\":\"true\"");
 	            	list.add("open interest");
 	            }
@@ -719,14 +719,14 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 	
-	public void setOnOpenInterest(OnOpenInterest onOpenInterest) throws Exception {
+	public void setOnRefresh(OnRefresh onRefresh) throws Exception {
 		if (this.isStarted) {
 			throw new Exception("You must set all callbacks prior to calling 'start'");
-		} else if (this.useOnOpenInterest) {
+		} else if (this.useOnRefresh) {
 			throw new Exception("'OnOpenInterest' callback has already been set");
 		} else {
-			this.onOpenInterest = onOpenInterest;
-			this.useOnOpenInterest = true;
+			this.onRefresh = onRefresh;
+			this.useOnRefresh = true;
 		}
 	}
 	
@@ -827,7 +827,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	public void start() throws Exception {
-		if (!(useOnTrade || useOnQuote || useOnOpenInterest || useOnUnusualActivity)) {
+		if (!(useOnTrade || useOnQuote || useOnRefresh || useOnUnusualActivity)) {
 			throw new Exception("You must set at least one callback method before starting.");
 		} else {
 			String token = this.getToken();
