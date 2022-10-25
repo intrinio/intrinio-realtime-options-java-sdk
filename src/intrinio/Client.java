@@ -176,27 +176,31 @@ public class Client implements WebSocket.Listener {
 						byte type = datum[offset + 21];						
 						ByteBuffer offsetBuffer;
 						if (type == 1 || type == 2) {
-							offsetBuffer = buffer.slice(offset, 42);
+							int messageSize = Quote.getMessageSize();
+							offsetBuffer = buffer.slice(offset, messageSize);
 							Quote quote = Quote.parse(offsetBuffer);
-							offset += 42;
+							offset += messageSize;
 							if (useOnQuote) onQuote.onQuote(quote);
 						}
 						else if (type == 0) {
-							offsetBuffer = buffer.slice(offset, 50);
+							int messageSize = Trade.getMessageSize();
+							offsetBuffer = buffer.slice(offset, messageSize);
 							Trade trade = Trade.parse(offsetBuffer);
-							offset += 50;
+							offset += messageSize;
 							if (useOnTrade) onTrade.onTrade(trade);
 						}
 						else if (type > 3) {
-							offsetBuffer = buffer.slice(offset, 55);
+							int messageSize = UnusualActivity.getMessageSize();
+							offsetBuffer = buffer.slice(offset, messageSize);
 							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
-							offset += 55;
+							offset += messageSize;
 							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
 						}
 						else if (type == 3) {
-							offsetBuffer = buffer.slice(offset, 34);
+							int messageSize = Refresh.getMessageSize();
+							offsetBuffer = buffer.slice(offset, messageSize);
 							Refresh r = Refresh.parse(offsetBuffer);
-							offset += 34;
+							offset += messageSize;
 							if (useOnRefresh) onRefresh.onRefresh(r);
 						}
 						else {

@@ -9,32 +9,25 @@ import java.time.ZonedDateTime;
 public record Trade(String symbol, double price, long size, long totalVolume, double timestamp) {
 
 	public float getStrikePrice() {
-		int whole = (this.symbol.charAt(13) - '0') * 10000 + (this.symbol.charAt(14) - '0') * 1000 + (this.symbol.charAt(15) - '0') * 100 + (this.symbol.charAt(16) - '0') * 10 + (this.symbol.charAt(17) - '0');
-		float part = (this.symbol.charAt(18) - '0') * 0.1f + (this.symbol.charAt(19) - '0') * 0.01f + (this.symbol.charAt(20) - '0') * 0.001f;
-		return (whole + part);
+		return Float.parseFloat(this.symbol.substring(this.symbol.indexOf('_') + 8));
 	}
-	
-	public boolean isPut() {
-		return this.symbol.charAt(12) == 'P';
-	}
-	
+
+	public boolean isPut() { return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'P'; }
+
 	public boolean isCall() {
-		return this.symbol.charAt(12) == 'C';
+		return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'C';
 	}
-	
+
 	public ZonedDateTime getExpirationDate() {
-		int year = 2000 + (this.symbol.charAt(6) - '0') * 10 + (this.symbol.charAt(7) - '0');
-		int month = (this.symbol.charAt(8) - '0') * 10 + (this.symbol.charAt(9) - '0');
-		int day = (this.symbol.charAt(10) - '0') * 10 + (this.symbol.charAt(11) - '0');
+		int dateStartIndex = this.symbol.indexOf('_') + 1;
+		int year = 2000 + (this.symbol.charAt(dateStartIndex) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 1) - '0');
+		int month = (this.symbol.charAt(dateStartIndex + 2) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 3) - '0');
+		int day = (this.symbol.charAt(dateStartIndex + 4) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 5) - '0');
 		ZoneId tz = ZoneId.of("America/New_York");
 		return ZonedDateTime.of(year, month, day, 12, 0, 0, 0, tz);
 	}
-	
-	public String getUnderlyingSymbol() {
-		int i;
-		for (i = 5; i >= 0 && this.symbol.charAt(i) == '_'; i--);
-		return this.symbol.substring(0,i+1);
-	}
+
+	public String getUnderlyingSymbol() { return this.symbol.substring(0, this.symbol.indexOf('_')).trim(); }
 	
 	public String toString() {
 		String s =
@@ -46,6 +39,10 @@ public record Trade(String symbol, double price, long size, long totalVolume, do
 				", Timestamp: " + this.timestamp +
 				")";
 		return s;
+	}
+
+	static int getMessageSize(){
+		return 59;
 	}
 	
 	public static Trade parse(byte[] bytes) {
