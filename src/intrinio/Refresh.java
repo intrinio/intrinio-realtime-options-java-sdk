@@ -38,10 +38,6 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
                 this.lowPrice);
     }
 
-    static int getMessageSize(){
-        return 42;
-    }
-
     public static Refresh parse(byte[] bytes) {
         //byte structure:
         // symbol [0-19]

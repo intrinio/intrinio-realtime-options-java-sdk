@@ -53,10 +53,6 @@ public record UnusualActivity(
 				this.timestamp);
 	}
 
-	static int getMessageSize(){
-		return 60;
-	}
-	
 	public static UnusualActivity parse(byte[] bytes) {
 		//byte structure:
 		// symbol [0-19]

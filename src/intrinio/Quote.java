@@ -39,10 +39,6 @@ public record Quote(String symbol, double askPrice, long askSize, double bidPric
 				this.timestamp);
 	}
 
-	static int getMessageSize(){
-		return 46;
-	}
-
 	public static Quote parse(byte[] bytes) {
 		//byte structure:
 		// symbol [0-19]

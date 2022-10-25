@@ -84,6 +84,10 @@ public class Client implements WebSocket.Listener {
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
 	private Config config;
+	private final int tradeMessageSize = 59;
+	private final int quoteMessageSize = 46;
+	private final int refreshMessageSize = 42;
+	private final int unusualActivityMessageSize = 60;
 	private final LinkedBlockingDeque<byte[]> data = new LinkedBlockingDeque<>();
 	private AtomicReference<Token> token = new AtomicReference<Token>(new Token(null, LocalDateTime.now()));
 	private WebSocketState wsState = null;
@@ -176,31 +180,27 @@ public class Client implements WebSocket.Listener {
 						byte type = datum[offset + 21];						
 						ByteBuffer offsetBuffer;
 						if (type == 1) {
-							int messageSize = Quote.getMessageSize();
-							offsetBuffer = buffer.slice(offset, messageSize);
+							offsetBuffer = buffer.slice(offset, quoteMessageSize);
 							Quote quote = Quote.parse(offsetBuffer);
-							offset += messageSize;
+							offset += quoteMessageSize;
 							if (useOnQuote) onQuote.onQuote(quote);
 						}
 						else if (type == 0) {
-							int messageSize = Trade.getMessageSize();
-							offsetBuffer = buffer.slice(offset, messageSize);
+							offsetBuffer = buffer.slice(offset, tradeMessageSize);
 							Trade trade = Trade.parse(offsetBuffer);
-							offset += messageSize;
+							offset += tradeMessageSize;
 							if (useOnTrade) onTrade.onTrade(trade);
 						}
 						else if (type > 2) {
-							int messageSize = UnusualActivity.getMessageSize();
-							offsetBuffer = buffer.slice(offset, messageSize);
+							offsetBuffer = buffer.slice(offset, unusualActivityMessageSize);
 							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
-							offset += messageSize;
+							offset += unusualActivityMessageSize;
 							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
 						}
 						else if (type == 2) {
-							int messageSize = Refresh.getMessageSize();
-							offsetBuffer = buffer.slice(offset, messageSize);
+							offsetBuffer = buffer.slice(offset, refreshMessageSize);
 							Refresh r = Refresh.parse(offsetBuffer);
-							offset += messageSize;
+							offset += refreshMessageSize;
 							if (useOnRefresh) onRefresh.onRefresh(r);
 						}
 						else {

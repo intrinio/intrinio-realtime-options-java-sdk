@@ -41,10 +41,6 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 				this.underlyingPriceAtExecution);
 	}
 
-	static int getMessageSize(){
-		return 59;
-	}
-	
 	public static Trade parse(byte[] bytes) {
 		//byte structure:
 		// symbol [0-19]
