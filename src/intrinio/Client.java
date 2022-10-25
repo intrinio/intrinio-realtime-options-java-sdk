@@ -175,7 +175,7 @@ public class Client implements WebSocket.Listener {
 						buffer.position(0);
 						byte type = datum[offset + 21];						
 						ByteBuffer offsetBuffer;
-						if (type == 1 || type == 2) {
+						if (type == 1) {
 							int messageSize = Quote.getMessageSize();
 							offsetBuffer = buffer.slice(offset, messageSize);
 							Quote quote = Quote.parse(offsetBuffer);
@@ -189,14 +189,14 @@ public class Client implements WebSocket.Listener {
 							offset += messageSize;
 							if (useOnTrade) onTrade.onTrade(trade);
 						}
-						else if (type > 3) {
+						else if (type > 2) {
 							int messageSize = UnusualActivity.getMessageSize();
 							offsetBuffer = buffer.slice(offset, messageSize);
 							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
 							offset += messageSize;
 							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
 						}
-						else if (type == 3) {
+						else if (type == 2) {
 							int messageSize = Refresh.getMessageSize();
 							offsetBuffer = buffer.slice(offset, messageSize);
 							Refresh r = Refresh.parse(offsetBuffer);
