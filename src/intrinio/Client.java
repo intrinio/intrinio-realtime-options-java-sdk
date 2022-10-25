@@ -177,7 +177,7 @@ public class Client implements WebSocket.Listener {
 					buffer.limit(datum.length);
 					for (long i = 0L; i < count; i++) {
 						buffer.position(0);
-						byte type = datum[offset + 21];						
+						byte type = datum[offset + 20];
 						ByteBuffer offsetBuffer;
 						if (type == 1) {
 							offsetBuffer = buffer.slice(offset, quoteMessageSize);
