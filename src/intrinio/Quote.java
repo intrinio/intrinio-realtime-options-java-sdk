@@ -44,53 +44,77 @@ public record Quote(String symbol, double askPrice, long askSize, double bidPric
 	}
 
 	public static Quote parse(byte[] bytes) {
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 21)).toString();
-		QuoteType type;
-		switch (bytes[21]) {
-		case 1: type = QuoteType.ASK;
-			break;
-		case 2: type = QuoteType.BID;
-			break;
-		default: type = QuoteType.INVALID;
-		}
+		//byte structure:
+		// symbol [0-19]
+		// event type [20]
+		// price type [21]
+		// ask price [22-25]
+		// ask size [26-29]
+		// bid price [30-33]
+		// bid size [34-37]
+		// timestamp [38-45]
+		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes[21]);
 		
-		ByteBuffer priceBuffer = ByteBuffer.wrap(bytes, 22, 8);
-		priceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double price = priceBuffer.getDouble();
+		ByteBuffer askPriceBuffer = ByteBuffer.wrap(bytes, 22, 4);
+		askPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double askPrice = scaler.getScaledValue(askPriceBuffer.getInt());
 		
-		ByteBuffer sizeBuffer = ByteBuffer.wrap(bytes, 30, 4);
-		sizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		long size = Integer.toUnsignedLong(sizeBuffer.getInt());
+		ByteBuffer askSizeBuffer = ByteBuffer.wrap(bytes, 26, 4);
+		askSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		long askSize = Integer.toUnsignedLong(askSizeBuffer.getInt());
+
+		ByteBuffer bidPriceBuffer = ByteBuffer.wrap(bytes, 30, 4);
+		bidPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double bidPrice = scaler.getScaledValue(bidPriceBuffer.getInt());
+
+		ByteBuffer bidSizeBuffer = ByteBuffer.wrap(bytes, 34, 4);
+		bidSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		long bidSize = Integer.toUnsignedLong(bidSizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 34, 8);
+		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 38, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double timestamp = timeStampBuffer.getDouble();
-		return new Quote(type, symbol, price, size, timestamp);
+		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
+
+		return new Quote(symbol, askPrice, askSize, bidPrice, bidSize, timestamp);
 	}
 
 	public static Quote parse(ByteBuffer bytes) {
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 21)).toString();
-		QuoteType type;
-		switch (bytes.get(21)) {
-		case 1: type = QuoteType.ASK;
-			break;
-		case 2: type = QuoteType.BID;
-			break;
-		default: type = QuoteType.INVALID;
-		}
+		//byte structure:
+		// symbol [0-19]
+		// event type [20]
+		// price type [21]
+		// ask price [22-25]
+		// ask size [26-29]
+		// bid price [30-33]
+		// bid size [34-37]
+		// timestamp [38-45]
+		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes.get(21));
 		
-		ByteBuffer priceBuffer = bytes.slice(22, 8);
-		priceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double price = priceBuffer.getDouble();
+		ByteBuffer askPriceBuffer = bytes.slice(22, 4);
+		askPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double askPrice = scaler.getScaledValue(askPriceBuffer.getInt());
 		
-		ByteBuffer sizeBuffer = bytes.slice(30, 4);
-		sizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		long size = Integer.toUnsignedLong(sizeBuffer.getInt());
+		ByteBuffer askSizeBuffer = bytes.slice(26, 4);
+		askSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		long askSize = Integer.toUnsignedLong(askSizeBuffer.getInt());
+
+		ByteBuffer bidPriceBuffer = bytes.slice(30, 4);
+		bidPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double bidPrice = scaler.getScaledValue(bidPriceBuffer.getInt());
+
+		ByteBuffer bidSizeBuffer = bytes.slice(34, 4);
+		bidSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		long bidSize = Integer.toUnsignedLong(bidSizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = bytes.slice(34, 8);
+		ByteBuffer timeStampBuffer = bytes.slice(38, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double timestamp = timeStampBuffer.getDouble();
-		return new Quote(type, symbol, price, size, timestamp);
+		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
+
+		return new Quote(symbol, askPrice, askSize, bidPrice, bidSize, timestamp);
 	}
 	
 }
