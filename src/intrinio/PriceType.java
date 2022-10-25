@@ -84,4 +84,8 @@ enum PriceType {
     double getScaledValue(int value){
         return ((double) value) / ((double) getScale());
     }
+
+    double getScaledValue(long value){
+        return ((double) value) / ((double) getScale());
+    }
 }

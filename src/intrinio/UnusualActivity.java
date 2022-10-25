@@ -10,12 +10,12 @@ public record UnusualActivity(
 		String symbol,
 		UnusualActivityType type, 
 		UnusualActivitySentiment sentiment,
-		float totalValue,
+		double totalValue,
 		long totalSize,
-		float averagePrice,
-		float askAtExecution,
-		float bidAtExecution,
-		float priceAtExecution,
+		double averagePrice,
+		double askPriceAtExecution,
+		double bidPriceAtExecution,
+		double underlyingPriceAtExecution,
 		double timestamp) {
 
 	public float getStrikePrice() {
@@ -40,20 +40,17 @@ public record UnusualActivity(
 	public String getUnderlyingSymbol() { return this.symbol.substring(0, this.symbol.indexOf('_')).trim(); }
 	
 	public String toString() {
-		String s =
-				"Unusual Activity (" +
-				"Symbol: " + this.symbol +
-				", Activity Type: " + this.type +
-				", Sentiment: " + this.sentiment +
-				", Total Value: " + this.totalValue +
-				", Total Size: " + this.totalSize +
-				", AveragePrice: " + this.averagePrice +
-				", Ask at Execution: " + this.askAtExecution +
-				", Bid at Execution: " + this.bidAtExecution +
-				", Underlying Price at Execution: " + this.priceAtExecution +
-				", Timestamp: " + this.timestamp +
-				")";
-		return s;
+		return String.format("Quote (Symbol: %s, Type: %s, Sentiment: %s, TotalValue: %s, TotalSize: %s, AveragePrice: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s, Timestamp: %s)",
+				this.symbol,
+				this.type,
+				this.sentiment,
+				this.totalValue,
+				this.totalSize,
+				this.averagePrice,
+				this.askPriceAtExecution,
+				this.bidPriceAtExecution,
+				this.underlyingPriceAtExecution,
+				this.timestamp);
 	}
 
 	static int getMessageSize(){
@@ -61,77 +58,112 @@ public record UnusualActivity(
 	}
 	
 	public static UnusualActivity parse(byte[] bytes) {
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 21)).toString();
+		//byte structure:
+		// symbol [0-19]
+		// event type [20]
+		// sentiment [21]
+		// price type [22]
+		// underlying price type [23]
+		// total value [24-31]
+		// total size [32-35]
+		// average price [36-39]
+		// ask price at execution [40-43]
+		// bid price at execution [44-47]
+		// underlying price at execution [48-51]
+		// timestamp [52-59]
+
+		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
 		
 		UnusualActivityType type;
-		switch (bytes[21]) {
-		case 4: type = UnusualActivityType.BLOCK;
-			break;
-		case 5: type = UnusualActivityType.SWEEP;
-			break;
-		case 6: type = UnusualActivityType.LARGE;
-			break;
-		default: type = UnusualActivityType.INVALID;
+		switch (bytes[20]) {
+			case 3: type = UnusualActivityType.BLOCK;
+				break;
+			case 4: type = UnusualActivityType.SWEEP;
+				break;
+			case 5: type = UnusualActivityType.LARGE;
+				break;
+			case 6: type = UnusualActivityType.GOLDEN;
+				break;
+			default: type = UnusualActivityType.INVALID;
 		}
 		
 		UnusualActivitySentiment sentiment;
-		switch (bytes[22]) {
-		case 0: sentiment = UnusualActivitySentiment.NEUTRAL;
-			break;
-		case 1: sentiment = UnusualActivitySentiment.BULLISH;
-			break;
-		case 2: sentiment = UnusualActivitySentiment.BEARISH;
-			break;
-		default: sentiment = UnusualActivitySentiment.INVALID;
+		switch (bytes[21]) {
+			case 0: sentiment = UnusualActivitySentiment.NEUTRAL;
+				break;
+			case 1: sentiment = UnusualActivitySentiment.BULLISH;
+				break;
+			case 2: sentiment = UnusualActivitySentiment.BEARISH;
+				break;
+			default: sentiment = UnusualActivitySentiment.INVALID;
 		}
+
+		PriceType scaler = PriceType.fromInt(bytes[22]);
+		PriceType underlyingScaler = PriceType.fromInt(bytes[23]);
 		
-		ByteBuffer totalValueBuffer = ByteBuffer.wrap(bytes, 23, 4);
+		ByteBuffer totalValueBuffer = ByteBuffer.wrap(bytes, 24, 8);
 		totalValueBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float totalValue = totalValueBuffer.getFloat();
+		double totalValue = scaler.getScaledValue(totalValueBuffer.getLong());
 		
-		ByteBuffer totalSizeBuffer = ByteBuffer.wrap(bytes, 27, 4);
+		ByteBuffer totalSizeBuffer = ByteBuffer.wrap(bytes, 32, 4);
 		totalSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long totalSize = Integer.toUnsignedLong(totalSizeBuffer.getInt());
 		
-		ByteBuffer averagePriceBuffer = ByteBuffer.wrap(bytes, 31, 4);
+		ByteBuffer averagePriceBuffer = ByteBuffer.wrap(bytes, 36, 4);
 		averagePriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float averagePrice = averagePriceBuffer.getFloat();
+		double averagePrice = scaler.getScaledValue(averagePriceBuffer.getInt());
 		
-		ByteBuffer askAtExecutionBuffer = ByteBuffer.wrap(bytes, 35, 4);
+		ByteBuffer askAtExecutionBuffer = ByteBuffer.wrap(bytes, 40, 4);
 		askAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float askAtExecution = askAtExecutionBuffer.getFloat();
+		double askAtExecution = scaler.getScaledValue(askAtExecutionBuffer.getInt());
 		
-		ByteBuffer bidAtExecutionBuffer = ByteBuffer.wrap(bytes, 39, 4);
+		ByteBuffer bidAtExecutionBuffer = ByteBuffer.wrap(bytes, 44, 4);
 		bidAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float bidAtExecution = bidAtExecutionBuffer.getFloat();
+		double bidAtExecution = scaler.getScaledValue(bidAtExecutionBuffer.getInt());
 		
-		ByteBuffer priceAtExecutionBuffer = ByteBuffer.wrap(bytes, 43, 4);
-		priceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float priceAtExecution = priceAtExecutionBuffer.getFloat();
+		ByteBuffer underlyingPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 48, 4);
+		underlyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underlyingPriceAtExecutionBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 47, 8);
+		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 52, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double timestamp = timeStampBuffer.getDouble();
+		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, priceAtExecution, timestamp);
+		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
 	}
 	
 	public static UnusualActivity parse(ByteBuffer bytes) {
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 21)).toString();
+		//byte structure:
+		// symbol [0-19]
+		// event type [20]
+		// sentiment [21]
+		// price type [22]
+		// underlying price type [23]
+		// total value [24-31]
+		// total size [32-35]
+		// average price [36-39]
+		// ask price at execution [40-43]
+		// bid price at execution [44-47]
+		// underlying price at execution [48-51]
+		// timestamp [52-59]
+
+		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
 		
 		UnusualActivityType type;
-		switch (bytes.get(21)) {
-		case 4: type = UnusualActivityType.BLOCK;
-			break;
-		case 5: type = UnusualActivityType.SWEEP;
-			break;
-		case 6: type = UnusualActivityType.LARGE;
-			break;
-		default: type = UnusualActivityType.INVALID;
+		switch (bytes.get(20)) {
+			case 3: type = UnusualActivityType.BLOCK;
+				break;
+			case 4: type = UnusualActivityType.SWEEP;
+				break;
+			case 5: type = UnusualActivityType.LARGE;
+				break;
+			case 6: type = UnusualActivityType.GOLDEN;
+				break;
+			default: type = UnusualActivityType.INVALID;
 		}
 		
 		UnusualActivitySentiment sentiment;
-		switch (bytes.get(22)) {
+		switch (bytes.get(21)) {
 		case 0: sentiment = UnusualActivitySentiment.NEUTRAL;
 			break;
 		case 1: sentiment = UnusualActivitySentiment.BULLISH;
@@ -140,35 +172,38 @@ public record UnusualActivity(
 			break;
 		default: sentiment = UnusualActivitySentiment.INVALID;
 		}
+
+		PriceType scaler = PriceType.fromInt(bytes.get(22));
+		PriceType underlyingScaler = PriceType.fromInt(bytes.get(23));
 		
-		ByteBuffer totalValueBuffer = bytes.slice(23, 4);
+		ByteBuffer totalValueBuffer = bytes.slice(24, 8);
 		totalValueBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float totalValue = totalValueBuffer.getFloat();
+		double totalValue = scaler.getScaledValue(totalValueBuffer.getLong());
 		
-		ByteBuffer totalSizeBuffer = bytes.slice(27, 4);
+		ByteBuffer totalSizeBuffer = bytes.slice(32, 4);
 		totalSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long totalSize = Integer.toUnsignedLong(totalSizeBuffer.getInt());
 		
-		ByteBuffer averagePriceBuffer = bytes.slice(31, 4);
+		ByteBuffer averagePriceBuffer = bytes.slice(36, 4);
 		averagePriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float averagePrice = averagePriceBuffer.getFloat();
+		double averagePrice = scaler.getScaledValue(averagePriceBuffer.getInt());
 		
-		ByteBuffer askAtExecutionBuffer = bytes.slice(35, 4);
+		ByteBuffer askAtExecutionBuffer = bytes.slice(40, 4);
 		askAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float askAtExecution = askAtExecutionBuffer.getFloat();
+		double askAtExecution = scaler.getScaledValue(askAtExecutionBuffer.getInt());
 		
-		ByteBuffer bidAtExecutionBuffer = bytes.slice(39, 4);
+		ByteBuffer bidAtExecutionBuffer = bytes.slice(44, 4);
 		bidAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float bidAtExecution = bidAtExecutionBuffer.getFloat();
+		double bidAtExecution = scaler.getScaledValue(bidAtExecutionBuffer.getInt());
 		
-		ByteBuffer priceAtExecutionBuffer = bytes.slice(43, 4);
-		priceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float priceAtExecution = priceAtExecutionBuffer.getFloat();
+		ByteBuffer underlyingPriceAtExecutionBuffer = bytes.slice(48, 4);
+		underlyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underlyingPriceAtExecutionBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = bytes.slice(47, 8);
+		ByteBuffer timeStampBuffer = bytes.slice(52, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double timestamp = timeStampBuffer.getDouble();
+		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, priceAtExecution, timestamp);
+		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
 	}
 }
