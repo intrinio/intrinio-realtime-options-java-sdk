@@ -16,23 +16,16 @@ class TradeHandler implements OnTrade {
 }
 
 class QuoteHandler implements OnQuote {
-	public AtomicInteger askCount = new AtomicInteger(0);
-	public AtomicInteger bidCount = new AtomicInteger(0);
+	public AtomicInteger quoteCount = new AtomicInteger(0);
 	
 	public void onQuote(Quote quote) {
-		if (quote.type() == QuoteType.ASK) {
-			askCount.incrementAndGet();
-		} else if (quote.type() == QuoteType.BID) {
-			bidCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid quote type detected: %s", quote.type().toString());
-		}
+		quoteCount.incrementAndGet();
 	}
 }
 
 class RefreshHandler implements OnRefresh {
 	public AtomicInteger rCount = new AtomicInteger(0);
-	
+
 	public void onRefresh(Refresh r) {
 		rCount.incrementAndGet();
 	}
@@ -42,16 +35,25 @@ class UnusualActivityHandler implements OnUnusualActivity {
 	public AtomicInteger blockCount = new AtomicInteger(0);
 	public AtomicInteger sweepCount = new AtomicInteger(0);
 	public AtomicInteger largeTradeCount = new AtomicInteger(0);
+	public AtomicInteger goldenTradeCount = new AtomicInteger(0);
 	
 	public void onUnusualActivity(UnusualActivity ua) {
-		if (ua.type() == UnusualActivityType.BLOCK) {
-			blockCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.SWEEP) {
-			sweepCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.LARGE) {
-			largeTradeCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+		switch (ua.type()){
+			case BLOCK:
+				blockCount.incrementAndGet();
+				break;
+			case SWEEP:
+				sweepCount.incrementAndGet();
+				break;
+			case LARGE:
+				largeTradeCount.incrementAndGet();
+				break;
+			case GOLDEN:
+				goldenTradeCount.incrementAndGet();
+				break;
+			default:
+				Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+				break;
 		}
 	}
 }
@@ -87,7 +89,7 @@ public class SampleApp {
 			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
 			client.setOnTrade(tradeHandler);
 			//client.setOnQuote(quoteHandler);
-			//client.setOnRefresh(refreshHandler);
+			client.setOnRefresh(refreshHandler);
 			client.setOnUnusualActivity(unusualActivityHandler);
 			
 			// Start the client
@@ -117,14 +119,14 @@ public class SampleApp {
 			public void run() {
 				Client.Log(client.getStats());
 				String appStats = String.format(
-						"Messages (Trade = %d, Ask = %d, Bid = %d, Open Interest = %d, Block = %d, Sweep = %d, Large = %d)",
+						"Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, Goldens = %d)",
 						tradeHandler.tradeCount.get(),
-						quoteHandler.askCount.get(),
-						quoteHandler.bidCount.get(),
+						quoteHandler.quoteCount.get(),
 						refreshHandler.rCount.get(),
 						unusualActivityHandler.blockCount.get(),
 						unusualActivityHandler.sweepCount.get(),
-						unusualActivityHandler.largeTradeCount.get());
+						unusualActivityHandler.largeTradeCount.get(),
+						unusualActivityHandler.goldenTradeCount.get());
 				Client.Log(appStats);
 			}
 		};

@@ -30,19 +30,15 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.ArrayList;
 
 import com.google.gson.Gson;
 
 class WebSocketState {
 	
 	private WebSocket ws;
-	private int index = WebSocketState.assignIndex();
 	private boolean isReady = false;
 	private boolean isReconnecting = false;
 	private LocalDateTime lastReset = LocalDateTime.now();
-	
-	private static AtomicInteger nextIndex = new AtomicInteger(0);
 	
 	WebSocketState() {}
 
@@ -77,15 +73,6 @@ class WebSocketState {
 	void reset() {
 		this.lastReset = LocalDateTime.now();
 	}
-	
-	int getIndex() {
-		return this.index;
-	}
-	
-	static int assignIndex() {
-		return WebSocketState.nextIndex.getAndAdd(1);
-	}
-	
 }
 
 record Token (String token, LocalDateTime date) {}
@@ -97,16 +84,13 @@ public class Client implements WebSocket.Listener {
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
 	private Config config;
-	private final int FirehoseSocketCount = 6;
 	private final LinkedBlockingDeque<byte[]> data = new LinkedBlockingDeque<>();
-	
 	private AtomicReference<Token> token = new AtomicReference<Token>(new Token(null, LocalDateTime.now()));
-	private Hashtable<Integer,WebSocketState> wsStates = new Hashtable<Integer,WebSocketState>();
-	private Hashtable<Integer, Integer> wsIndices = new Hashtable<Integer, Integer>();
+	private WebSocketState wsState = null;
 	private AtomicLong dataMsgCount = new AtomicLong(0l);
 	private AtomicLong textMsgCount = new AtomicLong(0l);
 	private HashSet<String> channels = new HashSet<String>();
-	private ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>> dataBuckets;
+	private LinkedBlockingDeque<Tuple<byte[], Boolean>> dataBucket;
 	private OnTrade onTrade = (Trade trade) -> {};
 	private boolean useOnTrade = false;
 	private OnQuote onQuote = (Quote quote) -> {};
@@ -116,9 +100,8 @@ public class Client implements WebSocket.Listener {
 	private OnUnusualActivity onUnusualActivity = (UnusualActivity ua) -> {};
 	private boolean useOnUnusualActivity = false;
 	private Thread[] threads;
-	private Lock[] dataBucketLocks;
+	private Lock dataBucketLock;
 	private boolean isCancellationRequested = false;
-	private int socketCount;
 	private boolean isStarted = false;
 	
 	private class Tuple<X, Y> { 
@@ -136,10 +119,8 @@ public class Client implements WebSocket.Listener {
 				Thread.sleep(20000);
 				wsLock.readLock().lock();
 				try {
-					for (WebSocketState wss : wsStates.values()) {
-						if (wss.isReady()) {
-							wss.getWebSocket().sendText(heartbeatMessage, true);
-						}
+					if (wsState.isReady()) {
+						wsState.getWebSocket().sendText(heartbeatMessage, true);
 					}
 				} finally {
 					wsLock.readLock().unlock();
@@ -149,15 +130,15 @@ public class Client implements WebSocket.Listener {
 		}
 	});
 	
-	private byte[] getCompleteData(int dataIndex) {
+	private byte[] getCompleteData() {
 		Queue<byte[]> parts = new LinkedList<>();
 		int length = 0;
 		boolean done = false;
-		dataBucketLocks[dataIndex].lock();
+		dataBucketLock.lock();
 		try {			
 			while (!done) {
 				try {				
-					Tuple<byte[], Boolean> datum = dataBuckets.get(dataIndex).poll(1, TimeUnit.SECONDS);
+					Tuple<byte[], Boolean> datum = dataBucket.poll(1, TimeUnit.SECONDS);
 					if (datum != null) {
 						parts.add(datum.x);
 						done = datum.y;
@@ -167,7 +148,7 @@ public class Client implements WebSocket.Listener {
 					Client.Log("process data interrupted");
 				}
 			}			
-		} finally {dataBucketLocks[dataIndex].unlock();}		
+		} finally {dataBucketLock.unlock();}
 		
 		//reassemble into one byte array
 		byte[] bytes = new byte[length];
@@ -232,32 +213,15 @@ public class Client implements WebSocket.Listener {
 	};
 	
 	private void initializeThreads() throws Exception {
-		switch (config.getProvider()) {
-		case OPRA:
-		case MANUAL:
-			for (int i = 0; i < threads.length; i++) {
-				threads[i] = new Thread(processData);
-			}
-			break;
-		case OPRA_FIREHOSE:
-		case MANUAL_FIREHOSE:
-			for (int i = 0; i < threads.length; i++) {
-				threads[i] = new Thread(processData);
-			}
-			break;
-		default: throw new Exception("Provider not specified!");
+		for (int i = 0; i < threads.length; i++) {
+			threads[i] = new Thread(processData);
 		}
 	}
 	
 	private boolean allReady() {
 		wsLock.readLock().lock();
 		try {
-			if (wsStates.isEmpty()) return false;
-			boolean allReady = true;
-			for (WebSocketState wsState : wsStates.values()) {
-				allReady &= wsState.isReady();
-			}
-			return allReady;
+			return (wsState == null) ? false : wsState.isReady();
 		} finally {
 			wsLock.readLock().unlock();
 		}
@@ -266,51 +230,31 @@ public class Client implements WebSocket.Listener {
 	private String getAuthUrl() throws Exception {
 		String authUrl;
 		switch (config.getProvider()) {
-		case OPRA: authUrl = "https://realtime-options.intrinio.com/auth?api_key=" + config.getApiKey();
+		case OPRA:
+		case OPRA_FIREHOSE: authUrl = "https://realtime-options.intrinio.com/auth?api_key=" + config.getApiKey();
 			break;
-		case OPRA_FIREHOSE: authUrl = "https://realtime-options-firehose.intrinio.com:8000/auth?api_key=" + config.getApiKey();
-			break;
-		case MANUAL: authUrl = "http://" + config.getIpAddress() + "/auth?api_key=" + config.getApiKey();
-			break;
-		case MANUAL_FIREHOSE: authUrl = "http://" + config.getIpAddress() + ":8000/auth?api_key=" + config.getApiKey();
+		case MANUAL:
+		case MANUAL_FIREHOSE: authUrl = "http://" + config.getIpAddress() + "/auth?api_key=" + config.getApiKey();
 			break;
 		default: throw new Exception("Provider not specified!");
 		}
 		return authUrl;
 	}
 	
-	private String getWebSocketUrl (String token, int index) throws Exception {
+	private String getWebSocketUrl (String token) throws Exception {
 		String wsUrl;
 		switch (config.getProvider()) {
-		case OPRA: wsUrl = "wss://realtime-options.intrinio.com/socket/websocket?vsn=1.0.0&token=" + token;
+		case OPRA:
+		case OPRA_FIREHOSE: wsUrl = "wss://realtime-options.intrinio.com/socket/websocket?vsn=1.0.0&token=" + token;
 			break;
-		case OPRA_FIREHOSE: wsUrl = "wss://realtime-options-firehose.intrinio.com:800" + index + "/socket/websocket?vsn=1.0.0&token=" + token;
-			break;
-		case MANUAL: wsUrl = "ws://" + config.getIpAddress() + "/socket/websocket?vsn=1.0.0&token=" + token;
-			break;
-		case MANUAL_FIREHOSE: wsUrl = "ws://" + config.getIpAddress() + ":800" + index + "/socket/websocket?vsn=1.0.0&token=" + token;
+		case MANUAL:
+		case MANUAL_FIREHOSE: wsUrl = "ws://" + config.getIpAddress() + "/socket/websocket?vsn=1.0.0&token=" + token;
 			break;
 		default: throw new Exception("Provider not specified!");
 		}
 		return wsUrl;
 	}
-	
-	private int getWebSocketCount() throws Exception {
-		int count;
-		switch (config.getProvider()) {
-		case OPRA:
-		case MANUAL:
-			count = 1;
-			break;
-		case OPRA_FIREHOSE:
-		case MANUAL_FIREHOSE:
-			count = FirehoseSocketCount;
-			break;
-		default: throw new Exception("Provider not specified!");
-		}
-		return count;
-	}
-	
+
 	private void doBackoff(BooleanSupplier callback) {
 		int i = 0;
 		long backoff = this.selfHealBackoffs[i];
@@ -344,7 +288,7 @@ public class Client implements WebSocket.Listener {
 		HttpURLConnection con;
 		try {
 			con = (HttpURLConnection) url.openConnection();
-			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv2.0");
+			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv3.0");
 		} catch (IOException e) {
 			Client.Log("Authorization Failure. Please check your network connection. " + e.getMessage());
 			return false;
@@ -393,10 +337,9 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 		
-	private void tryReconnect(int wsId) {
-		BooleanSupplier reconnectFn = () -> { 
-			WebSocketState wsState = wsStates.get(wsId);
-			Client.Log("Websocket %d - Reconnecting...", wsState.getIndex());
+	private void tryReconnect() {
+		BooleanSupplier reconnectFn = () -> {
+			Client.Log("Websocket - Reconnecting...");
 			if (wsState.isReady()) {
 				return true;
 			} else {
@@ -408,9 +351,9 @@ public class Client implements WebSocket.Listener {
 				}
 				if (wsState.getLastReset().plusDays(5).compareTo(LocalDateTime.now()) >= 0) {
 					String token = this.getToken();
-					resetWebSocket(wsId, token);
+					resetWebSocket(token);
 				} else {
-					resetWebSocket(wsId, this.token.get().token());
+					resetWebSocket(this.token.get().token());
 				}
 				return false;
 			}
@@ -433,7 +376,7 @@ public class Client implements WebSocket.Listener {
                 	list.add("quote");
                 }
                 if (useOnRefresh) {
-                	sb.append(",\"open_interest_data\":\"true\"");
+                	sb.append(",\"refresh_data\":\"true\"");
                 	list.add("open interest");
                 }
                 if (useOnUnusualActivity) {
@@ -443,18 +386,17 @@ public class Client implements WebSocket.Listener {
                 String subscriptionSelection = sb.toString();
                 message = "{\"topic\":\"options:" + channel + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
                 subscriptionSelection = String.join(", ", list);
-                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wsState.getIndex(), channel, subscriptionSelection);
+                Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", channel, subscriptionSelection);
 				wsState.getWebSocket().sendText(message, true);
 			}
 		}
 	}
 	
 	public CompletionStage<Void> onClose(WebSocket ws, int status, String reason) {
-		WebSocketState wsState = wsStates.get(ws.hashCode());
 		wsLock.readLock().lock();
 		try {
 			if (!wsState.isReconnecting()) {
-				Client.Log("Websocket %d - Closed", wsState.getIndex());
+				Client.Log("Websocket - Closed");
 				wsLock.readLock().unlock();
 				wsLock.writeLock().lock();
 				try {
@@ -464,7 +406,7 @@ public class Client implements WebSocket.Listener {
 				}
 				if (!this.isCancellationRequested) {
 					new Thread(() -> {
-						this.tryReconnect(ws.hashCode());
+						this.tryReconnect();
 					}).start();
 				}
 			}
@@ -475,8 +417,7 @@ public class Client implements WebSocket.Listener {
 	}
 		
 	public void onError(WebSocket ws, Throwable err) {
-		WebSocketState wsState = wsStates.get(ws.hashCode());
-		Client.Log("Websocket %d - Error - %s", wsState.getIndex(), err.getMessage());
+		Client.Log("Websocket - Error - %s", err.getMessage());
 		ws.request(1);
 	}
 		
@@ -498,21 +439,19 @@ public class Client implements WebSocket.Listener {
 		dataMsgCount.addAndGet(1);
 		byte[] bytes = new byte[data.remaining()];
 		data.get(bytes);
-		int dataIndex = wsIndices.get(ws.hashCode());
-		this.dataBuckets.get(dataIndex).add(new Tuple<byte[], Boolean>(bytes, isComplete));
+		this.dataBucket.add(new Tuple<byte[], Boolean>(bytes, isComplete));
 		if (isComplete) {
-			this.data.add(getCompleteData(dataIndex));
+			this.data.add(getCompleteData());
 		}
 		ws.request(1);
 		return null;
 	}
 		
-	private void resetWebSocket(int wsId, String token) {
-		WebSocketState wsState = wsStates.get(wsId);
-		Client.Log("Websocket %d - Resetting", wsState.getIndex());
+	private void resetWebSocket(String token) {
+		Client.Log("Websocket - Resetting");
 		String wsUrl;
 		try {
-			wsUrl = this.getWebSocketUrl(token, wsStates.get(wsId).getIndex());
+			wsUrl = this.getWebSocketUrl(token);
 		} catch (Exception e) {
 			Client.Log("Reset Failure. " + e.getMessage());
 			return;
@@ -528,15 +467,13 @@ public class Client implements WebSocket.Listener {
 		CompletableFuture<WebSocket> task = client.newWebSocketBuilder().buildAsync(uri, (WebSocket.Listener) this);
 		try {
 			WebSocket ws = task.get();
-			Client.Log("Websocket %d - Reset", wsState.getIndex());
+			Client.Log("Websocket - Reset");
 			wsLock.writeLock().lock();
 			try {
 				wsState.setWebSocket(ws);
 				wsState.reset();
 				wsState.setReady(true);
 				wsState.setReconnecting(false);
-				this.wsStates.remove(wsId);
-				this.wsStates.put(ws.hashCode(), wsState);
 			} finally {
 				wsLock.writeLock().unlock();
 			}
@@ -553,56 +490,46 @@ public class Client implements WebSocket.Listener {
 	private void initializeWebSockets(String token) {
 		wsLock.writeLock().lock();
 		try {
-			int wsCount;
+			Client.Log("Websocket - Connecting...");
+			WebSocketState websocketState = new WebSocketState();
+			String wsUrl;
 			try {
-				wsCount = socketCount;
+				wsUrl = this.getWebSocketUrl(token);
 			} catch (Exception e) {
 				Client.Log("Initialization Failure. " + e.getMessage());
 				return;
 			}
-			for (int i = 0; i < wsCount; i++) {
-				Client.Log("Websocket %d - Connecting...", i);
-				WebSocketState wsState = new WebSocketState();
-				String wsUrl;
-				try {
-					wsUrl = this.getWebSocketUrl(token, wsState.getIndex());
-				} catch (Exception e) {
-					Client.Log("Initialization Failure. " + e.getMessage());
-					return;
+			URI uri = null;
+			try {
+				uri = new URI(wsUrl);
+			} catch (URISyntaxException e) {
+				Client.Log("Initialization Failure. Bad URL (%s). %s", wsUrl, e.getMessage());
+				return;
+			}
+			HttpClient client = HttpClient.newHttpClient();
+			CompletableFuture<WebSocket> task = client.newWebSocketBuilder().buildAsync(uri, (WebSocket.Listener) this);
+			try {
+				WebSocket ws = task.get();
+				Client.Log("Websocket - Connected");
+				websocketState.setWebSocket(ws);
+				this.wsState = websocketState;
+				websocketState.setReady(true);
+				websocketState.setReconnecting(false);
+				if (!heartbeatThread.isAlive()) {
+					heartbeatThread.start();
 				}
-				URI uri = null;
-				try {
-					uri = new URI(wsUrl);
-				} catch (URISyntaxException e) {
-					Client.Log("Initialization Failure. Bad URL (%s). %s", wsUrl, e.getMessage());
-					return;
-				}
-				HttpClient client = HttpClient.newHttpClient();
-				CompletableFuture<WebSocket> task = client.newWebSocketBuilder().buildAsync(uri, (WebSocket.Listener) this);
-				try {
-					WebSocket ws = task.get();
-					Client.Log("Websocket %d - Connected", wsState.getIndex());
-					wsState.setWebSocket(ws);
-					this.wsStates.put(wsState.hashCode(), wsState);
-					this.wsIndices.put(ws.hashCode(), wsState.getIndex());
-					wsState.setReady(true);
-					wsState.setReconnecting(false);
-					if (!heartbeatThread.isAlive()) {
-						heartbeatThread.start();
+				for (Thread thread : threads) {
+					if (!thread.isAlive()) {
+						thread.start();
 					}
-					for (Thread thread : threads) {
-						if (!thread.isAlive()) {
-							thread.start();
-						}
-					}
-					this.onWebSocketConnected(ws, wsState);
-				} catch (ExecutionException e) {
-					Client.Log("Initialization Failure. Could not establish connection. %s", e.getMessage());
-					return;
-				} catch (InterruptedException e) {
-					Client.Log("Initialization Failure. Thread interrupted. %s", e.getMessage());
-					return;
 				}
+				this.onWebSocketConnected(ws, websocketState);
+			} catch (ExecutionException e) {
+				Client.Log("Initialization Failure. Could not establish connection. %s", e.getMessage());
+				return;
+			} catch (InterruptedException e) {
+				Client.Log("Initialization Failure. Thread interrupted. %s", e.getMessage());
+				return;
 			}
 		} finally {
 			wsLock.writeLock().unlock();
@@ -629,7 +556,7 @@ public class Client implements WebSocket.Listener {
 	            	list.add("quote");
 	            }
 	            if (useOnRefresh) {
-	            	sb.append(",\"open_interest_data\":\"true\"");
+	            	sb.append(",\"refresh_data\":\"true\"");
 	            	list.add("open interest");
 	            }
 	            if (useOnUnusualActivity) {
@@ -638,11 +565,9 @@ public class Client implements WebSocket.Listener {
 	            }
 	            String subscriptionSelection = sb.toString();
 	            String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
-	            for (WebSocketState wss : this.wsStates.values()) {
-	            	subscriptionSelection = String.join(", ", list);
-	                Client.Log("Websocket %d - Joining channel: %s (subscriptions = %s)", wss.getIndex(), symbol, subscriptionSelection);
-	    			wss.getWebSocket().sendText(message, true);
-	            }            
+				subscriptionSelection = String.join(", ", list);
+				Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", symbol, subscriptionSelection);
+				wsState.getWebSocket().sendText(message, true);
 			}
 		}
 	}
@@ -650,10 +575,8 @@ public class Client implements WebSocket.Listener {
 	private void _leave(String symbol) {
 		if (channels.remove(symbol)) {
 			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_leave\",\"payload\":{},\"ref\":null}";
-			for (WebSocketState wss : this.wsStates.values()) {
-				Client.Log("Websocket %d - Leaving channel: %s", wss.getIndex(), symbol);
-				wss.getWebSocket().sendText(message, true);
-			}
+			Client.Log("Websocket - Leaving channel: %s", symbol);
+			wsState.getWebSocket().sendText(message, true);
 		}
 	}
 		
@@ -667,13 +590,8 @@ public class Client implements WebSocket.Listener {
 		try {
 			this.config = Config.load();
 			threads = new Thread[config.getNumThreads()];
-			socketCount = getWebSocketCount();
-			dataBucketLocks = new ReentrantLock[socketCount];
-			dataBuckets = new ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>>(socketCount);
-			for(int i = 0; i < socketCount; i++) {
-				dataBucketLocks[i] = new ReentrantLock();
-				dataBuckets.add(new LinkedBlockingDeque<Tuple<byte[], Boolean>>());
-			}				
+			dataBucketLock = new ReentrantLock();
+			dataBucket = new LinkedBlockingDeque<Tuple<byte[], Boolean>>();
 			this.initializeThreads();
 		} catch (Exception e) {
 			Client.Log("Initialization Failure. " + e.getMessage());
@@ -684,13 +602,8 @@ public class Client implements WebSocket.Listener {
 		try {
 			this.config = config;
 			threads = new Thread[config.getNumThreads()];
-			socketCount = getWebSocketCount();
-			dataBucketLocks = new ReentrantLock[socketCount];
-			dataBuckets = new ArrayList<LinkedBlockingDeque<Tuple<byte[], Boolean>>>(socketCount);
-			for(int i = 0; i < socketCount; i++) {
-				dataBucketLocks[i] = new ReentrantLock();
-				dataBuckets.add(new LinkedBlockingDeque<Tuple<byte[], Boolean>>());
-			}				
+			dataBucketLock = new ReentrantLock();
+			dataBucket = new LinkedBlockingDeque<Tuple<byte[], Boolean>>();
 			this.initializeThreads();
 		} catch (Exception e) {
 			Client.Log("Initialization Failure. " + e.getMessage());
@@ -723,7 +636,7 @@ public class Client implements WebSocket.Listener {
 		if (this.isStarted) {
 			throw new Exception("You must set all callbacks prior to calling 'start'");
 		} else if (this.useOnRefresh) {
-			throw new Exception("'OnOpenInterest' callback has already been set");
+			throw new Exception("'OnRefresh' callback has already been set");
 		} else {
 			this.onRefresh = onRefresh;
 			this.useOnRefresh = true;
@@ -843,17 +756,13 @@ public class Client implements WebSocket.Listener {
 		} catch (InterruptedException e) {}
 		wsLock.writeLock().lock();
 		try {
-			for (WebSocketState wsState : this.wsStates.values()) {
-				wsState.setReady(false);
-			}
+			wsState.setReady(false);
 		} finally {
 			wsLock.writeLock().unlock();
 		}
 		this.isCancellationRequested = true;
-		for (WebSocketState wsState : this.wsStates.values()) {
-			Client.Log("Websocket %d - Closing", wsState.getIndex());
-			wsState.getWebSocket().sendClose(1000, "Client closed");
-		}
+		Client.Log("Websocket - Closing");
+		wsState.getWebSocket().sendClose(1000, "Client closed");
 		try {
 			this.heartbeatThread.join();
 			for (Thread thread : threads) {
@@ -864,10 +773,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	private int getDataSize() {
-		int j = 0;
-		for(int i = 0; i < dataBuckets.size(); i++)
-			j += dataBuckets.get(i).size();
-		return j;
+		return dataBucket.size();
 	}
 	
 	public String getStats() {
