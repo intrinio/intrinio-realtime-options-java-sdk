@@ -84,10 +84,10 @@ public class Client implements WebSocket.Listener {
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
 	private Config config;
-	private final int tradeMessageSize = 59;
-	private final int quoteMessageSize = 46;
-	private final int refreshMessageSize = 42;
-	private final int unusualActivityMessageSize = 60;
+	private final int tradeMessageSize = 70; //59 used + 11 pad
+	private final int quoteMessageSize = 50; //46 used + 4 pad
+	private final int refreshMessageSize = 50; //42 used + 8 pad
+	private final int unusualActivityMessageSize = 72; //60 used + 12 pad
 	private final LinkedBlockingDeque<byte[]> data = new LinkedBlockingDeque<>();
 	private AtomicReference<Token> token = new AtomicReference<Token>(new Token(null, LocalDateTime.now()));
 	private WebSocketState wsState = null;
