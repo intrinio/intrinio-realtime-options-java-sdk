@@ -42,8 +42,8 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
         //byte structure:
         // symbol [0-19]
         // event type [20]
-        // open interest [21-24]
-        // price type [25]
+        // price type [21]
+        // open interest [22-25]
         // open price [26-29]
         // close price [30-33]
         // high price [34-37]
@@ -51,11 +51,11 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
 
         String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
 
-        ByteBuffer openInterestBuffer = ByteBuffer.wrap(bytes, 21, 4);
+        PriceType scaler = PriceType.fromInt(bytes[21]);
+
+        ByteBuffer openInterestBuffer = ByteBuffer.wrap(bytes, 22, 4);
         openInterestBuffer.order(ByteOrder.LITTLE_ENDIAN);
         long openInterest = Integer.toUnsignedLong(openInterestBuffer.getInt());
-
-        PriceType scaler = PriceType.fromInt(bytes[25]);
 
         ByteBuffer openPriceBuffer = ByteBuffer.wrap(bytes, 26, 4);
         openPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
@@ -79,8 +79,8 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
     public static Refresh parse(ByteBuffer bytes) {
         //byte structure:
         // symbol [0-19]
-        // open interest [21-24]
-        // price type [25]
+        // price type [21]
+        // open interest [22-25]
         // open price [26-29]
         // close price [30-33]
         // high price [34-37]
@@ -88,11 +88,11 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
 
         String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
 
-        ByteBuffer openInterestBuffer = bytes.slice(21, 4);
+        PriceType scaler = PriceType.fromInt(bytes.get(21));
+
+        ByteBuffer openInterestBuffer = bytes.slice(22, 4);
         openInterestBuffer.order(ByteOrder.LITTLE_ENDIAN);
         long openInterest = Integer.toUnsignedLong(openInterestBuffer.getInt());
-
-        PriceType scaler = PriceType.fromInt(bytes.get(25));
 
         ByteBuffer openPriceBuffer = bytes.slice(26, 4);
         openPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
