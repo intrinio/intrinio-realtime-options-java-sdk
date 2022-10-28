@@ -43,49 +43,50 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 
 	public static Trade parse(byte[] bytes) {
 		//byte structure:
-		// symbol [0-19]
-		// event type [20]
-		// price [21-24]
-		// price type [25]
-		// underlying price type [26]
-		// size [27-30]
-		// timestamp [31-38]
-		// total volume [39-46]
-		// ask price at execution [47-50]
-		// bid price at execution [51-54]
-		// underlying price at execution [55-58]
+		// symbol length [0]
+		// symbol [1-21]
+		// event type [22]
+		// price type [23]
+		// underlying price type [24]
+		// price [25-28]
+		// size [29-32]
+		// timestamp [33-40]
+		// total volume [41-48]
+		// ask price at execution [49-52]
+		// bid price at execution [53-56]
+		// underlying price at execution [57-60]
 
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
-		
-		ByteBuffer priceBuffer = ByteBuffer.wrap(bytes, 21, 4);
+		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes[23]);
+		PriceType underlyingScaler = PriceType.fromInt(bytes[24]);
+
+		ByteBuffer priceBuffer = ByteBuffer.wrap(bytes, 25, 4);
 		priceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		int unscaledPrice = priceBuffer.getInt();
-
-		PriceType scaler = PriceType.fromInt(bytes[25]);
-		PriceType underlyingScaler = PriceType.fromInt(bytes[26]);
 		double price = scaler.getScaledValue(unscaledPrice);
-		
-		ByteBuffer sizeBuffer = ByteBuffer.wrap(bytes, 27, 4);
+
+		ByteBuffer sizeBuffer = ByteBuffer.wrap(bytes, 29, 4);
 		sizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long size = Integer.toUnsignedLong(sizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 31, 8);
+		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 33, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		ByteBuffer volumeBuffer = ByteBuffer.wrap(bytes, 39, 8);
+		ByteBuffer volumeBuffer = ByteBuffer.wrap(bytes, 41, 8);
 		volumeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long totalVolume = volumeBuffer.getLong();
 
-		ByteBuffer askPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 47, 4);
+		ByteBuffer askPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 49, 4);
 		askPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double askPriceAtExecution = scaler.getScaledValue(askPriceAtExecutionBuffer.getInt());
 
-		ByteBuffer bidPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 51, 4);
+		ByteBuffer bidPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 53, 4);
 		bidPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double bidPriceAtExecution = scaler.getScaledValue(bidPriceAtExecutionBuffer.getInt());
 
-		ByteBuffer underlyingPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 55, 4);
+		ByteBuffer underlyingPriceAtExecutionBuffer = ByteBuffer.wrap(bytes, 57, 4);
 		underlyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underlyingPriceAtExecutionBuffer.getInt());
 		
@@ -94,48 +95,50 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 	
 	public static Trade parse(ByteBuffer bytes) {
 		//byte structure:
-		// symbol [0-19]
-		// event type [20]
-		// price [21-24]
-		// price type [25]
-		// underlying price type [26]
-		// size [27-30]
-		// timestamp [31-38]
-		// total volume [39-46]
-		// ask price at execution [47-50]
-		// bid price at execution [51-54]
-		// underlying price at execution [55-58]
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
-		
-		ByteBuffer priceBuffer = bytes.slice(21, 4);
+		// symbol length [0]
+		// symbol [1-21]
+		// event type [22]
+		// price type [23]
+		// underlying price type [24]
+		// price [25-28]
+		// size [29-32]
+		// timestamp [33-40]
+		// total volume [41-48]
+		// ask price at execution [49-52]
+		// bid price at execution [53-56]
+		// underlying price at execution [57-60]
+
+		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes.get(23));
+		PriceType underlyingScaler = PriceType.fromInt(bytes.get(24));
+
+		ByteBuffer priceBuffer = bytes.slice(25, 4);
 		priceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		int unscaledPrice = priceBuffer.getInt();
-
-		PriceType scaler = PriceType.fromInt(bytes.get(25));
-		PriceType underlyingScaler = PriceType.fromInt(bytes.get(26));
 		double price = scaler.getScaledValue(unscaledPrice);
 		
-		ByteBuffer sizeBuffer = bytes.slice(27, 4);
+		ByteBuffer sizeBuffer = bytes.slice(29, 4);
 		sizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long size = Integer.toUnsignedLong(sizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = bytes.slice(31, 8);
+		ByteBuffer timeStampBuffer = bytes.slice(33, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		ByteBuffer volumeBuffer = bytes.slice(39, 8);
+		ByteBuffer volumeBuffer = bytes.slice(41, 8);
 		volumeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long totalVolume = volumeBuffer.getLong();
 
-		ByteBuffer askPriceAtExecutionBuffer = bytes.slice(47, 4);
+		ByteBuffer askPriceAtExecutionBuffer = bytes.slice(49, 4);
 		askPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double askPriceAtExecution = scaler.getScaledValue(askPriceAtExecutionBuffer.getInt());
 
-		ByteBuffer bidPriceAtExecutionBuffer = bytes.slice(51, 4);
+		ByteBuffer bidPriceAtExecutionBuffer = bytes.slice(53, 4);
 		bidPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double bidPriceAtExecution = scaler.getScaledValue(bidPriceAtExecutionBuffer.getInt());
 
-		ByteBuffer underyingPriceAtExecutionBuffer = bytes.slice(55, 4);
+		ByteBuffer underyingPriceAtExecutionBuffer = bytes.slice(57, 4);
 		underyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underyingPriceAtExecutionBuffer.getInt());
 

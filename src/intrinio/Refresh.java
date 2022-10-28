@@ -40,36 +40,37 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
 
     public static Refresh parse(byte[] bytes) {
         //byte structure:
-        // symbol [0-19]
-        // event type [20]
-        // price type [21]
-        // open interest [22-25]
-        // open price [26-29]
-        // close price [30-33]
-        // high price [34-37]
-        // low price [38-41]
+        // symbol length [0]
+        // symbol [1-21]
+        // event type [22]
+        // price type [23]
+        // open interest [24-27]
+        // open price [28-31]
+        // close price [32-35]
+        // high price [36-39]
+        // low price [40-43]
 
-        String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
+        String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
 
-        PriceType scaler = PriceType.fromInt(bytes[21]);
+        PriceType scaler = PriceType.fromInt(bytes[23]);
 
-        ByteBuffer openInterestBuffer = ByteBuffer.wrap(bytes, 22, 4);
+        ByteBuffer openInterestBuffer = ByteBuffer.wrap(bytes, 24, 4);
         openInterestBuffer.order(ByteOrder.LITTLE_ENDIAN);
         long openInterest = Integer.toUnsignedLong(openInterestBuffer.getInt());
 
-        ByteBuffer openPriceBuffer = ByteBuffer.wrap(bytes, 26, 4);
+        ByteBuffer openPriceBuffer = ByteBuffer.wrap(bytes, 28, 4);
         openPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double openPrice = scaler.getScaledValue(openPriceBuffer.getInt());
 
-        ByteBuffer closePriceBuffer = ByteBuffer.wrap(bytes, 30, 4);
+        ByteBuffer closePriceBuffer = ByteBuffer.wrap(bytes, 32, 4);
         closePriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double closePrice = scaler.getScaledValue(closePriceBuffer.getInt());
 
-        ByteBuffer highPriceBuffer = ByteBuffer.wrap(bytes, 34, 4);
+        ByteBuffer highPriceBuffer = ByteBuffer.wrap(bytes, 36, 4);
         highPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double highPrice = scaler.getScaledValue(highPriceBuffer.getInt());
 
-        ByteBuffer lowPriceBuffer = ByteBuffer.wrap(bytes, 38, 4);
+        ByteBuffer lowPriceBuffer = ByteBuffer.wrap(bytes, 40, 4);
         lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
 
@@ -78,35 +79,37 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
 
     public static Refresh parse(ByteBuffer bytes) {
         //byte structure:
-        // symbol [0-19]
-        // price type [21]
-        // open interest [22-25]
-        // open price [26-29]
-        // close price [30-33]
-        // high price [34-37]
-        // low price [38-41]
+        // symbol length [0]
+        // symbol [1-21]
+        // event type [22]
+        // price type [23]
+        // open interest [24-27]
+        // open price [28-31]
+        // close price [32-35]
+        // high price [36-39]
+        // low price [40-43]
 
-        String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
+        String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
 
-        PriceType scaler = PriceType.fromInt(bytes.get(21));
+        PriceType scaler = PriceType.fromInt(bytes.get(23));
 
-        ByteBuffer openInterestBuffer = bytes.slice(22, 4);
+        ByteBuffer openInterestBuffer = bytes.slice(24, 4);
         openInterestBuffer.order(ByteOrder.LITTLE_ENDIAN);
         long openInterest = Integer.toUnsignedLong(openInterestBuffer.getInt());
 
-        ByteBuffer openPriceBuffer = bytes.slice(26, 4);
+        ByteBuffer openPriceBuffer = bytes.slice(28, 4);
         openPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double openPrice = scaler.getScaledValue(openPriceBuffer.getInt());
 
-        ByteBuffer closePriceBuffer = bytes.slice(30, 4);
+        ByteBuffer closePriceBuffer = bytes.slice(32, 4);
         closePriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double closePrice = scaler.getScaledValue(closePriceBuffer.getInt());
 
-        ByteBuffer highPriceBuffer = bytes.slice(34, 4);
+        ByteBuffer highPriceBuffer = bytes.slice(36, 4);
         highPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double highPrice = scaler.getScaledValue(highPriceBuffer.getInt());
 
-        ByteBuffer lowPriceBuffer = bytes.slice(38, 4);
+        ByteBuffer lowPriceBuffer = bytes.slice(40, 4);
         lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
 

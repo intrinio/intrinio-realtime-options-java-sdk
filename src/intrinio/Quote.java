@@ -41,35 +41,37 @@ public record Quote(String symbol, double askPrice, long askSize, double bidPric
 
 	public static Quote parse(byte[] bytes) {
 		//byte structure:
-		// symbol [0-19]
-		// event type [20]
-		// price type [21]
-		// ask price [22-25]
-		// ask size [26-29]
-		// bid price [30-33]
-		// bid size [34-37]
-		// timestamp [38-45]
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 0, 20)).toString();
+		// symbol length [0]
+		// symbol [1-21]
+		// event type [22]
+		// price type [23]
+		// ask price [24-27]
+		// ask size [28-31]
+		// bid price [32-35]
+		// bid size [36-39]
+		// timestamp [40-47]
 
-		PriceType scaler = PriceType.fromInt(bytes[21]);
+		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes[23]);
 		
-		ByteBuffer askPriceBuffer = ByteBuffer.wrap(bytes, 22, 4);
+		ByteBuffer askPriceBuffer = ByteBuffer.wrap(bytes, 24, 4);
 		askPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double askPrice = scaler.getScaledValue(askPriceBuffer.getInt());
 		
-		ByteBuffer askSizeBuffer = ByteBuffer.wrap(bytes, 26, 4);
+		ByteBuffer askSizeBuffer = ByteBuffer.wrap(bytes, 28, 4);
 		askSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long askSize = Integer.toUnsignedLong(askSizeBuffer.getInt());
 
-		ByteBuffer bidPriceBuffer = ByteBuffer.wrap(bytes, 30, 4);
+		ByteBuffer bidPriceBuffer = ByteBuffer.wrap(bytes, 32, 4);
 		bidPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double bidPrice = scaler.getScaledValue(bidPriceBuffer.getInt());
 
-		ByteBuffer bidSizeBuffer = ByteBuffer.wrap(bytes, 34, 4);
+		ByteBuffer bidSizeBuffer = ByteBuffer.wrap(bytes, 36, 4);
 		bidSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long bidSize = Integer.toUnsignedLong(bidSizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 38, 8);
+		ByteBuffer timeStampBuffer = ByteBuffer.wrap(bytes, 40, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 
@@ -78,35 +80,37 @@ public record Quote(String symbol, double askPrice, long askSize, double bidPric
 
 	public static Quote parse(ByteBuffer bytes) {
 		//byte structure:
-		// symbol [0-19]
-		// event type [20]
-		// price type [21]
-		// ask price [22-25]
-		// ask size [26-29]
-		// bid price [30-33]
-		// bid size [34-37]
-		// timestamp [38-45]
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(0, 20)).toString();
+		// symbol length [0]
+		// symbol [1-21]
+		// event type [22]
+		// price type [23]
+		// ask price [24-27]
+		// ask size [28-31]
+		// bid price [32-35]
+		// bid size [36-39]
+		// timestamp [40-47]
 
-		PriceType scaler = PriceType.fromInt(bytes.get(21));
+		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
+
+		PriceType scaler = PriceType.fromInt(bytes.get(23));
 		
-		ByteBuffer askPriceBuffer = bytes.slice(22, 4);
+		ByteBuffer askPriceBuffer = bytes.slice(24, 4);
 		askPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double askPrice = scaler.getScaledValue(askPriceBuffer.getInt());
 		
-		ByteBuffer askSizeBuffer = bytes.slice(26, 4);
+		ByteBuffer askSizeBuffer = bytes.slice(28, 4);
 		askSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long askSize = Integer.toUnsignedLong(askSizeBuffer.getInt());
 
-		ByteBuffer bidPriceBuffer = bytes.slice(30, 4);
+		ByteBuffer bidPriceBuffer = bytes.slice(32, 4);
 		bidPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double bidPrice = scaler.getScaledValue(bidPriceBuffer.getInt());
 
-		ByteBuffer bidSizeBuffer = bytes.slice(34, 4);
+		ByteBuffer bidSizeBuffer = bytes.slice(36, 4);
 		bidSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		long bidSize = Integer.toUnsignedLong(bidSizeBuffer.getInt());
 		
-		ByteBuffer timeStampBuffer = bytes.slice(38, 8);
+		ByteBuffer timeStampBuffer = bytes.slice(40, 8);
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 
