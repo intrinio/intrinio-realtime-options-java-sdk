@@ -78,8 +78,7 @@ class WebSocketState {
 record Token (String token, LocalDateTime date) {}
 
 public class Client implements WebSocket.Listener {
-	private final String heartbeatMessage = "{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":null}";
-	private final String heartbeatResponse = "{\"topic\":\"phoenix\",\"ref\":null,\"payload\":{\"status\":\"ok\",\"response\":{}},\"event\":\"phx_reply\"}";
+	private final String EMPTY_STRING = "";
 	private final long[] selfHealBackoffs = {1000, 30000, 60000, 300000, 600000};
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
@@ -124,7 +123,7 @@ public class Client implements WebSocket.Listener {
 				wsLock.readLock().lock();
 				try {
 					if (wsState.isReady()) {
-						wsState.getWebSocket().sendText(heartbeatMessage, true);
+						wsState.getWebSocket().sendText(EMPTY_STRING, true);
 					}
 				} finally {
 					wsLock.readLock().unlock();
@@ -234,11 +233,9 @@ public class Client implements WebSocket.Listener {
 	private String getAuthUrl() throws Exception {
 		String authUrl;
 		switch (config.getProvider()) {
-		case OPRA:
-		case OPRA_FIREHOSE: authUrl = "https://realtime-options.intrinio.com/auth?api_key=" + config.getApiKey();
+		case OPRA: authUrl = "https://realtime-options.intrinio.com/auth?api_key=" + config.getApiKey();
 			break;
-		case MANUAL:
-		case MANUAL_FIREHOSE: authUrl = "http://" + config.getIpAddress() + "/auth?api_key=" + config.getApiKey();
+		case MANUAL: authUrl = "http://" + config.getIpAddress() + "/auth?api_key=" + config.getApiKey();
 			break;
 		default: throw new Exception("Provider not specified!");
 		}
@@ -248,11 +245,9 @@ public class Client implements WebSocket.Listener {
 	private String getWebSocketUrl (String token) throws Exception {
 		String wsUrl;
 		switch (config.getProvider()) {
-		case OPRA:
-		case OPRA_FIREHOSE: wsUrl = "wss://realtime-options.intrinio.com/socket/websocket?vsn=1.0.0&token=" + token;
+		case OPRA: wsUrl = "wss://realtime-options.intrinio.com/socket/websocket?vsn=1.0.0&token=" + token;
 			break;
-		case MANUAL:
-		case MANUAL_FIREHOSE: wsUrl = "ws://" + config.getIpAddress() + "/socket/websocket?vsn=1.0.0&token=" + token;
+		case MANUAL: wsUrl = "ws://" + config.getIpAddress() + "/socket/websocket?vsn=1.0.0&token=" + token;
 			break;
 		default: throw new Exception("Provider not specified!");
 		}
@@ -427,16 +422,21 @@ public class Client implements WebSocket.Listener {
 		
 	public CompletionStage<Void> onText(WebSocket ws, CharSequence data, boolean isComplete) {
 		textMsgCount.addAndGet(1l);
-		if (this.heartbeatResponse.contentEquals(data)) {
-			ws.request(1);
-			return null;
-		} else {
-			Gson gson = new Gson();
-			ErrorMessage errorMessage = gson.fromJson(data.toString(), ErrorMessage.class);
-			Client.Log("Error received: %s", errorMessage.getPayload().getResponse());
-			ws.request(1);
-			return null;
+		if (data.length() > 0) {
+			try {
+				Gson gson = new Gson();
+				ErrorMessage errorMessage = gson.fromJson(data.toString(), ErrorMessage.class);
+				Client.Log("Error received: %s", errorMessage.getPayload().getResponse());
+				ws.request(1);
+			}
+			catch (Exception e) {
+				Client.Log("Failure parsing error from server in onText(). " + e.getMessage());
+				ws.request(1);
+			}
 		}
+		else
+			ws.request(1);
+		return null;
 	}
 		
 	public CompletionStage<Void> onBinary(WebSocket ws, ByteBuffer data, boolean isComplete) {
@@ -541,38 +541,30 @@ public class Client implements WebSocket.Listener {
 	}
 		
 	private void _join(String symbol) {
-		if (((symbol == "lobby") || (symbol == "lobby_trades_only")) &&
-				((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE))) {
-			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
-		} else if (((symbol != "lobby") && (symbol != "lobby_trades_only")) &&
-	            ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE))) {
-			Client.Log("'FIREHOSE' providers may only join the lobby channel");
-		} else {
-			if (channels.add(symbol)) {
-				StringBuilder sb = new StringBuilder();
-				LinkedList<String> list = new LinkedList<String>();
-				if (useOnTrade) {
-					sb.append(",\"trade_data\":\"true\"");
-					list.add("trade");
-				}
-	            if (useOnQuote) {
-	            	sb.append(",\"quote_data\":\"true\"");
-	            	list.add("quote");
-	            }
-	            if (useOnRefresh) {
-	            	sb.append(",\"refresh_data\":\"true\"");
-	            	list.add("open interest");
-	            }
-	            if (useOnUnusualActivity) {
-	            	sb.append(",\"unusual_activity_data\":\"true\"");
-	            	list.add("unusual activity");
-	            }
-	            String subscriptionSelection = sb.toString();
-	            String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
-				subscriptionSelection = String.join(", ", list);
-				Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", symbol, subscriptionSelection);
-				wsState.getWebSocket().sendText(message, true);
+		if (channels.add(symbol)) {
+			StringBuilder sb = new StringBuilder();
+			LinkedList<String> list = new LinkedList<String>();
+			if (useOnTrade) {
+				sb.append(",\"trade_data\":\"true\"");
+				list.add("trade");
 			}
+			if (useOnQuote) {
+				sb.append(",\"quote_data\":\"true\"");
+				list.add("quote");
+			}
+			if (useOnRefresh) {
+				sb.append(",\"refresh_data\":\"true\"");
+				list.add("open interest");
+			}
+			if (useOnUnusualActivity) {
+				sb.append(",\"unusual_activity_data\":\"true\"");
+				list.add("unusual activity");
+			}
+			String subscriptionSelection = sb.toString();
+			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
+			subscriptionSelection = String.join(", ", list);
+			Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", symbol, subscriptionSelection);
+			wsState.getWebSocket().sendText(message, true);
 		}
 	}
 		
@@ -659,57 +651,43 @@ public class Client implements WebSocket.Listener {
 	}
 
 	public void join() {
-		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
-			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
-		} else {
-			while (!this.allReady()) {
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {}
-			}
-			String[] symbols = config.getSymbols();
-			for (String symbol : symbols) {
-				if (!this.channels.contains(symbol)) {
-					this._join(symbol);
-				}
+		while (!this.allReady()) {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {}
+		}
+		String[] symbols = config.getSymbols();
+		for (String symbol : symbols) {
+			if (!this.channels.contains(symbol)) {
+				this._join(symbol);
 			}
 		}
 	}
 		
 	public void join(String symbol) {
-		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
-			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
-		} else {
-			if (!symbol.isBlank()) {
-				while (!this.allReady()) {
-					try {
-						Thread.sleep(1000);
-					} catch (InterruptedException e) {}
-				}
-				if (!channels.contains(symbol)) this._join(symbol);
-			}
-		}
-	}
-		
-	public void join(String[] symbols) {
-		if ((config.getProvider() == Provider.MANUAL_FIREHOSE) || (config.getProvider() == Provider.OPRA_FIREHOSE)) {
-			Client.Log("'FIREHOSE' providers must join the lobby channel. Use the function 'joinLobby' instead.");
-		} else {
+		if (!symbol.isBlank()) {
 			while (!this.allReady()) {
 				try {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) {}
 			}
-			for (String symbol : symbols) {
-				if (!channels.contains(symbol)) this._join(symbol);
-			}
+			if (!channels.contains(symbol)) this._join(symbol);
+		}
+	}
+		
+	public void join(String[] symbols) {
+		while (!this.allReady()) {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {}
+		}
+		for (String symbol : symbols) {
+			if (!channels.contains(symbol)) this._join(symbol);
 		}
 	}
 	
 	public void joinLobby() {
-		if ((config.getProvider() != Provider.MANUAL_FIREHOSE) && (config.getProvider() != Provider.OPRA_FIREHOSE)) {
-			Client.Log("Only 'FIREHOSE' providers may join the lobby channel");
-		} else if (channels.contains("lobby")) {
+		if (channels.contains("lobby")) {
 			Client.Log("This client has already joined the lobby channel");
 		} else {
 			while (!this.allReady()) {
