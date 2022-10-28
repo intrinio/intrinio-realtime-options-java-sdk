@@ -3,6 +3,7 @@ package intrinio;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
@@ -15,13 +16,11 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -79,14 +78,15 @@ record Token (String token, LocalDateTime date) {}
 
 public class Client implements WebSocket.Listener {
 	private final String EMPTY_STRING = "";
+	private final String LOBBY_CHANNEL = "$FIREHOSE";
 	private final long[] selfHealBackoffs = {1000, 30000, 60000, 300000, 600000};
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
 	private Config config;
-	private final int tradeMessageSize = 72; //61 used + 11 pad
-	private final int quoteMessageSize = 52; //48 used + 4 pad
-	private final int refreshMessageSize = 52; //44 used + 8 pad
-	private final int unusualActivityMessageSize = 74; //62 used + 12 pad
+	private final int TRADE_MESSAGE_SIZE = 72; //61 used + 11 pad
+	private final int QUOTE_MESSAGE_SIZE = 52; //48 used + 4 pad
+	private final int REFRESH_MESSAGE_SIZE = 52; //44 used + 8 pad
+	private final int UNUSUAL_ACTIVITY_MESSAGE_SIZE = 74; //62 used + 12 pad
 	private final LinkedBlockingDeque<byte[]> data = new LinkedBlockingDeque<>();
 	private AtomicReference<Token> token = new AtomicReference<Token>(new Token(null, LocalDateTime.now()));
 	private WebSocketState wsState = null;
@@ -179,27 +179,27 @@ public class Client implements WebSocket.Listener {
 						byte type = datum[offset + 22];
 						ByteBuffer offsetBuffer;
 						if (type == 1) {
-							offsetBuffer = buffer.slice(offset, quoteMessageSize);
+							offsetBuffer = buffer.slice(offset, QUOTE_MESSAGE_SIZE);
 							Quote quote = Quote.parse(offsetBuffer);
-							offset += quoteMessageSize;
+							offset += QUOTE_MESSAGE_SIZE;
 							if (useOnQuote) onQuote.onQuote(quote);
 						}
 						else if (type == 0) {
-							offsetBuffer = buffer.slice(offset, tradeMessageSize);
+							offsetBuffer = buffer.slice(offset, TRADE_MESSAGE_SIZE);
 							Trade trade = Trade.parse(offsetBuffer);
-							offset += tradeMessageSize;
+							offset += TRADE_MESSAGE_SIZE;
 							if (useOnTrade) onTrade.onTrade(trade);
 						}
 						else if (type > 2) {
-							offsetBuffer = buffer.slice(offset, unusualActivityMessageSize);
+							offsetBuffer = buffer.slice(offset, UNUSUAL_ACTIVITY_MESSAGE_SIZE);
 							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
-							offset += unusualActivityMessageSize;
+							offset += UNUSUAL_ACTIVITY_MESSAGE_SIZE;
 							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
 						}
 						else if (type == 2) {
-							offsetBuffer = buffer.slice(offset, refreshMessageSize);
+							offsetBuffer = buffer.slice(offset, REFRESH_MESSAGE_SIZE);
 							Refresh r = Refresh.parse(offsetBuffer);
-							offset += refreshMessageSize;
+							offset += REFRESH_MESSAGE_SIZE;
 							if (useOnRefresh) onRefresh.onRefresh(r);
 						}
 						else {
@@ -362,31 +362,8 @@ public class Client implements WebSocket.Listener {
 		
 	private void onWebSocketConnected (WebSocket ws, WebSocketState wsState) {
 		if (!channels.isEmpty()) {
-			String message;
 			for (String channel : channels) {
-				StringBuilder sb = new StringBuilder();
-				LinkedList<String> list = new LinkedList<String>();
-				if (useOnTrade) {
-					sb.append(",\"trade_data\":\"true\"");
-					list.add("trade");
-				}
-                if (useOnQuote) {
-                	sb.append(",\"quote_data\":\"true\"");
-                	list.add("quote");
-                }
-                if (useOnRefresh) {
-                	sb.append(",\"refresh_data\":\"true\"");
-                	list.add("open interest");
-                }
-                if (useOnUnusualActivity) {
-                	sb.append(",\"unusual_activity_data\":\"true\"");
-                	list.add("unusual activity");
-                }
-                String subscriptionSelection = sb.toString();
-                message = "{\"topic\":\"options:" + channel + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
-                subscriptionSelection = String.join(", ", list);
-                Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", channel, subscriptionSelection);
-				wsState.getWebSocket().sendText(message, true);
+				_join(channel);
 			}
 		}
 	}
@@ -539,40 +516,51 @@ public class Client implements WebSocket.Listener {
 			wsLock.writeLock().unlock();
 		}
 	}
-		
+
+	private byte getChannelOptionMask() {
+		int optionMask = 0b0000;
+		if (useOnTrade) {
+			optionMask = optionMask | 0b0001;
+		}
+		if (useOnQuote) {
+			optionMask = optionMask | 0b0010;
+		}
+		if (useOnRefresh) {
+			optionMask = optionMask | 0b0100;
+		}
+		if (useOnUnusualActivity) {
+			optionMask = optionMask | 0b1000;
+		}
+		return (byte) optionMask;
+	}
+
 	private void _join(String symbol) {
 		if (channels.add(symbol)) {
-			StringBuilder sb = new StringBuilder();
-			LinkedList<String> list = new LinkedList<String>();
-			if (useOnTrade) {
-				sb.append(",\"trade_data\":\"true\"");
-				list.add("trade");
-			}
-			if (useOnQuote) {
-				sb.append(",\"quote_data\":\"true\"");
-				list.add("quote");
-			}
-			if (useOnRefresh) {
-				sb.append(",\"refresh_data\":\"true\"");
-				list.add("open interest");
-			}
-			if (useOnUnusualActivity) {
-				sb.append(",\"unusual_activity_data\":\"true\"");
-				list.add("unusual activity");
-			}
-			String subscriptionSelection = sb.toString();
-			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_join\"" + subscriptionSelection + ",\"payload\":{},\"ref\":null}";
-			subscriptionSelection = String.join(", ", list);
-			Client.Log("Websocket - Joining channel: %s (subscriptions = %s)", symbol, subscriptionSelection);
-			wsState.getWebSocket().sendText(message, true);
+			byte optionMask = getChannelOptionMask();
+			byte[] bytes = new byte[symbol.length() + 2];
+			bytes[0] = (byte) 74;
+			bytes[1] = optionMask;
+			symbol.getBytes(StandardCharsets.US_ASCII);
+			System.arraycopy(symbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, symbol.length());
+
+			Client.Log("Websocket - Joining channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", symbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			ByteBuffer message = ByteBuffer.wrap(bytes);
+			wsState.getWebSocket().sendBinary(message, true);
 		}
 	}
 		
 	private void _leave(String symbol) {
 		if (channels.remove(symbol)) {
-			String message = "{\"topic\":\"options:" + symbol + "\",\"event\":\"phx_leave\",\"payload\":{},\"ref\":null}";
-			Client.Log("Websocket - Leaving channel: %s", symbol);
-			wsState.getWebSocket().sendText(message, true);
+			byte optionMask = getChannelOptionMask();
+			byte[] bytes = new byte[symbol.length() + 2];
+			bytes[0] = (byte) 76;
+			bytes[1] = optionMask;
+			symbol.getBytes(StandardCharsets.US_ASCII);
+			System.arraycopy(symbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, symbol.length());
+
+			Client.Log("Websocket - leaving channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", symbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			ByteBuffer message = ByteBuffer.wrap(bytes);
+			wsState.getWebSocket().sendBinary(message, true);
 		}
 	}
 		
@@ -687,7 +675,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	public void joinLobby() {
-		if (channels.contains("lobby")) {
+		if (channels.contains(LOBBY_CHANNEL)) {
 			Client.Log("This client has already joined the lobby channel");
 		} else {
 			while (!this.allReady()) {
@@ -695,7 +683,7 @@ public class Client implements WebSocket.Listener {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) {}
 			}
-			this._join("lobby");
+			this._join(LOBBY_CHANNEL);
 		}
 	}
 		
@@ -718,7 +706,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	public void leaveLobby() {
-		if (channels.contains("lobby")) this.leave("lobby");
+		if (channels.contains(LOBBY_CHANNEL)) this.leave(LOBBY_CHANNEL);
 	}
 	
 	public void start() throws Exception {
