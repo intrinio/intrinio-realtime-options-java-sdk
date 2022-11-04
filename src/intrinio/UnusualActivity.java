@@ -7,7 +7,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
 public record UnusualActivity(
-		String symbol,
+		String contract,
 		UnusualActivityType type, 
 		UnusualActivitySentiment sentiment,
 		double totalValue,
@@ -19,29 +19,29 @@ public record UnusualActivity(
 		double timestamp) {
 
 	public float getStrikePrice() {
-		return Float.parseFloat(this.symbol.substring(this.symbol.indexOf('_') + 8));
+		return Float.parseFloat(this.contract.substring(this.contract.indexOf('_') + 8));
 	}
 
-	public boolean isPut() { return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'P'; }
+	public boolean isPut() { return this.contract.charAt(this.contract.indexOf('_') + 7) == 'P'; }
 
 	public boolean isCall() {
-		return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'C';
+		return this.contract.charAt(this.contract.indexOf('_') + 7) == 'C';
 	}
 
 	public ZonedDateTime getExpirationDate() {
-		int dateStartIndex = this.symbol.indexOf('_') + 1;
-		int year = 2000 + (this.symbol.charAt(dateStartIndex) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 1) - '0');
-		int month = (this.symbol.charAt(dateStartIndex + 2) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 3) - '0');
-		int day = (this.symbol.charAt(dateStartIndex + 4) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 5) - '0');
+		int dateStartIndex = this.contract.indexOf('_') + 1;
+		int year = 2000 + (this.contract.charAt(dateStartIndex) - '0') * 10 + (this.contract.charAt(dateStartIndex + 1) - '0');
+		int month = (this.contract.charAt(dateStartIndex + 2) - '0') * 10 + (this.contract.charAt(dateStartIndex + 3) - '0');
+		int day = (this.contract.charAt(dateStartIndex + 4) - '0') * 10 + (this.contract.charAt(dateStartIndex + 5) - '0');
 		ZoneId tz = ZoneId.of("America/New_York");
 		return ZonedDateTime.of(year, month, day, 12, 0, 0, 0, tz);
 	}
 
-	public String getUnderlyingSymbol() { return this.symbol.substring(0, this.symbol.indexOf('_')).trim(); }
+	public String getUnderlyingSymbol() { return this.contract.substring(0, this.contract.indexOf('_')).trim(); }
 	
 	public String toString() {
-		return String.format("Quote (Symbol: %s, Type: %s, Sentiment: %s, TotalValue: %s, TotalSize: %s, AveragePrice: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s, Timestamp: %s)",
-				this.symbol,
+		return String.format("Quote (Contract: %s, Type: %s, Sentiment: %s, TotalValue: %s, TotalSize: %s, AveragePrice: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s, Timestamp: %s)",
+				this.contract,
 				this.type,
 				this.sentiment,
 				this.totalValue,
@@ -55,8 +55,8 @@ public record UnusualActivity(
 
 	public static UnusualActivity parse(byte[] bytes) {
 		//byte structure:
-		// symbol length [0]
-		// symbol [1-21]
+		// contract length [0]
+		// contract [1-21]
 		// event type [22]
 		// sentiment [23]
 		// price type [24]
@@ -69,7 +69,7 @@ public record UnusualActivity(
 		// underlying price at execution [50-53]
 		// timestamp [54-61]
 
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
+		String contract = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
 		
 		UnusualActivityType type;
 		switch (bytes[22]) {
@@ -126,13 +126,13 @@ public record UnusualActivity(
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
+		return new UnusualActivity(contract, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
 	}
 	
 	public static UnusualActivity parse(ByteBuffer bytes) {
 		//byte structure:
-		// symbol length [0]
-		// symbol [1-21]
+		// contract length [0]
+		// contract [1-21]
 		// event type [22]
 		// sentiment [23]
 		// price type [24]
@@ -145,7 +145,7 @@ public record UnusualActivity(
 		// underlying price at execution [50-53]
 		// timestamp [54-61]
 
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
+		String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
 		
 		UnusualActivityType type;
 		switch (bytes.get(22)) {
@@ -202,6 +202,6 @@ public record UnusualActivity(
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 		
-		return new UnusualActivity(symbol, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
+		return new UnusualActivity(contract, type, sentiment, totalValue, totalSize, averagePrice, askAtExecution, bidAtExecution, underlyingPriceAtExecution, timestamp);
 	}
 }

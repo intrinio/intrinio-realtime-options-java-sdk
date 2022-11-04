@@ -6,31 +6,31 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public record Refresh (String symbol, long openInterest, double openPrice, double closePrice, double highPrice, double lowPrice){
+public record Refresh (String contract, long openInterest, double openPrice, double closePrice, double highPrice, double lowPrice){
     public float getStrikePrice() {
-        return Float.parseFloat(this.symbol.substring(this.symbol.indexOf('_') + 8));
+        return Float.parseFloat(this.contract.substring(this.contract.indexOf('_') + 8));
     }
 
-    public boolean isPut() { return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'P'; }
+    public boolean isPut() { return this.contract.charAt(this.contract.indexOf('_') + 7) == 'P'; }
 
     public boolean isCall() {
-        return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'C';
+        return this.contract.charAt(this.contract.indexOf('_') + 7) == 'C';
     }
 
     public ZonedDateTime getExpirationDate() {
-        int dateStartIndex = this.symbol.indexOf('_') + 1;
-        int year = 2000 + (this.symbol.charAt(dateStartIndex) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 1) - '0');
-        int month = (this.symbol.charAt(dateStartIndex + 2) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 3) - '0');
-        int day = (this.symbol.charAt(dateStartIndex + 4) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 5) - '0');
+        int dateStartIndex = this.contract.indexOf('_') + 1;
+        int year = 2000 + (this.contract.charAt(dateStartIndex) - '0') * 10 + (this.contract.charAt(dateStartIndex + 1) - '0');
+        int month = (this.contract.charAt(dateStartIndex + 2) - '0') * 10 + (this.contract.charAt(dateStartIndex + 3) - '0');
+        int day = (this.contract.charAt(dateStartIndex + 4) - '0') * 10 + (this.contract.charAt(dateStartIndex + 5) - '0');
         ZoneId tz = ZoneId.of("America/New_York");
         return ZonedDateTime.of(year, month, day, 12, 0, 0, 0, tz);
     }
 
-    public String getUnderlyingSymbol() { return this.symbol.substring(0, this.symbol.indexOf('_')).trim(); }
+    public String getUnderlyingSymbol() { return this.contract.substring(0, this.contract.indexOf('_')).trim(); }
 
     public String toString() {
-        return String.format("Quote (Symbol: %s, OpenInterest: %s, OpenPrice: %s, ClosePrice: %s, HighPrice: %s, LowPrice: %s)",
-                this.symbol,
+        return String.format("Quote (Contract: %s, OpenInterest: %s, OpenPrice: %s, ClosePrice: %s, HighPrice: %s, LowPrice: %s)",
+                this.contract,
                 this.openInterest,
                 this.openPrice,
                 this.closePrice,
@@ -40,8 +40,8 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
 
     public static Refresh parse(byte[] bytes) {
         //byte structure:
-        // symbol length [0]
-        // symbol [1-21]
+        // contract length [0]
+        // contract [1-21]
         // event type [22]
         // price type [23]
         // open interest [24-27]
@@ -50,7 +50,7 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
         // high price [36-39]
         // low price [40-43]
 
-        String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
+        String contract = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
 
         PriceType scaler = PriceType.fromInt(bytes[23]);
 
@@ -74,13 +74,13 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
         lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
 
-        return new Refresh(symbol, openInterest, openPrice, closePrice, highPrice, lowPrice);
+        return new Refresh(contract, openInterest, openPrice, closePrice, highPrice, lowPrice);
     }
 
     public static Refresh parse(ByteBuffer bytes) {
         //byte structure:
-        // symbol length [0]
-        // symbol [1-21]
+        // contract length [0]
+        // contract [1-21]
         // event type [22]
         // price type [23]
         // open interest [24-27]
@@ -89,7 +89,7 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
         // high price [36-39]
         // low price [40-43]
 
-        String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
+        String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
 
         PriceType scaler = PriceType.fromInt(bytes.get(23));
 
@@ -113,6 +113,6 @@ public record Refresh (String symbol, long openInterest, double openPrice, doubl
         lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
 
-        return new Refresh(symbol, openInterest, openPrice, closePrice, highPrice, lowPrice);
+        return new Refresh(contract, openInterest, openPrice, closePrice, highPrice, lowPrice);
     }
 }

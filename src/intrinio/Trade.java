@@ -6,32 +6,32 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public record Trade(String symbol, double price, long size, double timestamp, long totalVolume, double askPriceAtExecution, double bidPriceAtExecution, double underlyingPriceAtExecution) {
+public record Trade(String contract, double price, long size, double timestamp, long totalVolume, double askPriceAtExecution, double bidPriceAtExecution, double underlyingPriceAtExecution) {
 
 	public float getStrikePrice() {
-		return Float.parseFloat(this.symbol.substring(this.symbol.indexOf('_') + 8));
+		return Float.parseFloat(this.contract.substring(this.contract.indexOf('_') + 8));
 	}
 
-	public boolean isPut() { return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'P'; }
+	public boolean isPut() { return this.contract.charAt(this.contract.indexOf('_') + 7) == 'P'; }
 
 	public boolean isCall() {
-		return this.symbol.charAt(this.symbol.indexOf('_') + 7) == 'C';
+		return this.contract.charAt(this.contract.indexOf('_') + 7) == 'C';
 	}
 
 	public ZonedDateTime getExpirationDate() {
-		int dateStartIndex = this.symbol.indexOf('_') + 1;
-		int year = 2000 + (this.symbol.charAt(dateStartIndex) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 1) - '0');
-		int month = (this.symbol.charAt(dateStartIndex + 2) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 3) - '0');
-		int day = (this.symbol.charAt(dateStartIndex + 4) - '0') * 10 + (this.symbol.charAt(dateStartIndex + 5) - '0');
+		int dateStartIndex = this.contract.indexOf('_') + 1;
+		int year = 2000 + (this.contract.charAt(dateStartIndex) - '0') * 10 + (this.contract.charAt(dateStartIndex + 1) - '0');
+		int month = (this.contract.charAt(dateStartIndex + 2) - '0') * 10 + (this.contract.charAt(dateStartIndex + 3) - '0');
+		int day = (this.contract.charAt(dateStartIndex + 4) - '0') * 10 + (this.contract.charAt(dateStartIndex + 5) - '0');
 		ZoneId tz = ZoneId.of("America/New_York");
 		return ZonedDateTime.of(year, month, day, 12, 0, 0, 0, tz);
 	}
 
-	public String getUnderlyingSymbol() { return this.symbol.substring(0, this.symbol.indexOf('_')).trim(); }
+	public String getUnderlyingSymbol() { return this.contract.substring(0, this.contract.indexOf('_')).trim(); }
 	
 	public String toString() {
-		return String.format("Quote (Symbol: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
-				this.symbol,
+		return String.format("Quote (Contract: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
+				this.contract,
 				this.price,
 				this.size,
 				this.timestamp,
@@ -43,8 +43,8 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 
 	public static Trade parse(byte[] bytes) {
 		//byte structure:
-		// symbol length [0]
-		// symbol [1-21]
+		// contract length [0]
+		// contract [1-21]
 		// event type [22]
 		// price type [23]
 		// underlying price type [24]
@@ -56,7 +56,7 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 		// bid price at execution [53-56]
 		// underlying price at execution [57-60]
 
-		String symbol = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
+		String contract = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
 
 		PriceType scaler = PriceType.fromInt(bytes[23]);
 		PriceType underlyingScaler = PriceType.fromInt(bytes[24]);
@@ -90,13 +90,13 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 		underlyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underlyingPriceAtExecutionBuffer.getInt());
 		
-		return new Trade(symbol, price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
+		return new Trade(contract, price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
 	}
 	
 	public static Trade parse(ByteBuffer bytes) {
 		//byte structure:
-		// symbol length [0]
-		// symbol [1-21]
+		// contract length [0]
+		// contract [1-21]
 		// event type [22]
 		// price type [23]
 		// underlying price type [24]
@@ -108,7 +108,7 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 		// bid price at execution [53-56]
 		// underlying price at execution [57-60]
 
-		String symbol = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
+		String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
 
 		PriceType scaler = PriceType.fromInt(bytes.get(23));
 		PriceType underlyingScaler = PriceType.fromInt(bytes.get(24));
@@ -142,7 +142,7 @@ public record Trade(String symbol, double price, long size, double timestamp, lo
 		underyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underyingPriceAtExecutionBuffer.getInt());
 
-		return new Trade(symbol, price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
+		return new Trade(contract, price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
 	}
 	
 }
