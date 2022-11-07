@@ -79,7 +79,7 @@ public record UnusualActivity(
 				break;
 			case 5: type = UnusualActivityType.LARGE;
 				break;
-			case 6: type = UnusualActivityType.GOLDEN;
+			case 6: type = UnusualActivityType.UNUSUAL_SWEEP;
 				break;
 			default: type = UnusualActivityType.INVALID;
 		}
@@ -155,7 +155,7 @@ public record UnusualActivity(
 				break;
 			case 5: type = UnusualActivityType.LARGE;
 				break;
-			case 6: type = UnusualActivityType.GOLDEN;
+			case 6: type = UnusualActivityType.UNUSUAL_SWEEP;
 				break;
 			default: type = UnusualActivityType.INVALID;
 		}

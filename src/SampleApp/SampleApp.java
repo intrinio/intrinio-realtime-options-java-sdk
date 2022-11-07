@@ -35,7 +35,7 @@ class UnusualActivityHandler implements OnUnusualActivity {
 	public AtomicInteger blockCount = new AtomicInteger(0);
 	public AtomicInteger sweepCount = new AtomicInteger(0);
 	public AtomicInteger largeTradeCount = new AtomicInteger(0);
-	public AtomicInteger goldenTradeCount = new AtomicInteger(0);
+	public AtomicInteger unusualSweepCount = new AtomicInteger(0);
 	
 	public void onUnusualActivity(UnusualActivity ua) {
 		switch (ua.type()){
@@ -48,8 +48,8 @@ class UnusualActivityHandler implements OnUnusualActivity {
 			case LARGE:
 				largeTradeCount.incrementAndGet();
 				break;
-			case GOLDEN:
-				goldenTradeCount.incrementAndGet();
+			case UNUSUAL_SWEEP:
+				unusualSweepCount.incrementAndGet();
 				break;
 			default:
 				Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
@@ -119,14 +119,14 @@ public class SampleApp {
 			public void run() {
 				Client.Log(client.getStats());
 				String appStats = String.format(
-						"Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, Goldens = %d)",
+						"Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
 						tradeHandler.tradeCount.get(),
 						quoteHandler.quoteCount.get(),
 						refreshHandler.rCount.get(),
 						unusualActivityHandler.blockCount.get(),
 						unusualActivityHandler.sweepCount.get(),
 						unusualActivityHandler.largeTradeCount.get(),
-						unusualActivityHandler.goldenTradeCount.get());
+						unusualActivityHandler.unusualSweepCount.get());
 				Client.Log(appStats);
 			}
 		};

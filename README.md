@@ -20,14 +20,16 @@ For a sample Java project see: [intrinio-realtime-options-java-sdk](https://gith
 * Receive streaming, real-time option price updates:
 	* every trade
 	* conflated bid and ask
-	* open interest
-	* unusual activity(block trades, sweeps, whale trades)
+	* open interest, open, close, high, low
+	* unusual activity(block trades, sweeps, whale trades, unusual sweeps)
 * Subscribe to updates from individual options contracts (or option chains)
-* Subscribe to updates for the entire univers of option contracts (~1.5M option contracts)
+* Subscribe to updates for the entire universe of option contracts (~1.5M option contracts)
 
 ## Example Usage
+
 ```java
 package SampleApp;
+
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,136 +38,137 @@ import intrinio.*;
 
 class TradeHandler implements OnTrade {
 
-	public AtomicInteger tradeCount = new AtomicInteger(0);
-	
-	public void onTrade(Trade trade) {
-		tradeCount.incrementAndGet();
-	}
+    public AtomicInteger tradeCount = new AtomicInteger(0);
+
+    public void onTrade(Trade trade) {
+        tradeCount.incrementAndGet();
+    }
 }
 
 class QuoteHandler implements OnQuote {
-	public AtomicInteger askCount = new AtomicInteger(0);
-	public AtomicInteger bidCount = new AtomicInteger(0);
-	
-	public void onQuote(Quote quote) {
-		if (quote.type() == QuoteType.ASK) {
-			askCount.incrementAndGet();
-		} else if (quote.type() == QuoteType.BID) {
-			bidCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid quote type detected: %s", quote.type().toString());
-		}
-	}
+    public AtomicInteger quoteCount = new AtomicInteger(0);
+
+    public void onQuote(Quote quote) {
+        quoteCount.incrementAndGet();
+    }
 }
 
 class RefreshHandler implements OnRefresh {
-	public AtomicInteger oiCount = new AtomicInteger(0);
-	
-	public void onRefresh(Refresh r) {
-		rCount.incrementAndGet();
-	}
+    public AtomicInteger rCount = new AtomicInteger(0);
+
+    public void onRefresh(Refresh r) {
+        rCount.incrementAndGet();
+    }
 }
 
 class UnusualActivityHandler implements OnUnusualActivity {
-	public AtomicInteger blockCount = new AtomicInteger(0);
-	public AtomicInteger sweepCount = new AtomicInteger(0);
-	public AtomicInteger largeTradeCount = new AtomicInteger(0);
-	
-	public void onUnusualActivity(UnusualActivity ua) {
-		if (ua.type() == UnusualActivityType.BLOCK) {
-			blockCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.SWEEP) {
-			sweepCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.LARGE) {
-			largeTradeCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
-		}
-	}
+    public AtomicInteger blockCount = new AtomicInteger(0);
+    public AtomicInteger sweepCount = new AtomicInteger(0);
+    public AtomicInteger largeTradeCount = new AtomicInteger(0);
+    public AtomicInteger unusualSweepCount = new AtomicInteger(0);
+
+    public void onUnusualActivity(UnusualActivity ua) {
+        switch (ua.type()){
+            case BLOCK:
+                blockCount.incrementAndGet();
+                break;
+            case SWEEP:
+                sweepCount.incrementAndGet();
+                break;
+            case LARGE:
+                largeTradeCount.incrementAndGet();
+                break;
+            case UNUSUAL_SWEEP:
+                unusualSweepCount.incrementAndGet();
+                break;
+            default:
+                Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+                break;
+        }
+    }
 }
 
 public class SampleApp {
-	
-	public static void main(String[] args) {
-		Client.Log("Starting sample app");
-		
-		// Create only the handlers/callbacks that you need
-		// These will get registered below
-		TradeHandler tradeHandler = new TradeHandler();
-		QuoteHandler quoteHandler = new QuoteHandler();
-		OpenInterestHandler openInterestHandler = new OpenInterestHandler();
-		UnusualActivityHandler unusualActivityHandler = new UnusualActivityHandler();
-		
-		// You can either create a config class or default to using the intrinio/config.json file
-		//Config config = null;
-		//try {config = new Config("apiKeyHere", Provider.OPRA, null, null, 8);} catch (Exception e) {e.printStackTrace();}
-		//Client client = new Client(config);
-		Client client = new Client();
-		
-		// Register a callback for a graceful shutdown
-		Runtime.getRuntime().addShutdownHook(new Thread( new Runnable() {
-			public void run() {
-				Client.Log("Stopping sample app");
-				client.stop();
-			}
-		}));
-		
-		try {
-			// Register only the callbacks that you want.
-			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
-			client.setOnTrade(tradeHandler);
-			//client.setOnQuote(quoteHandler);
-			//client.setOnOpenInterest(openInterestHandler);
-			client.setOnUnusualActivity(unusualActivityHandler);
-			
-			// Start the client
-			client.start();
-			
-			// Use this to subscribe to a static list of symbols (option contracts) provided in config.json
-			//client.join();
-			
-			// Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
-			//client.joinLobby();
 
-			// Use this to subscribe, dynamically, to an option chain (all option contracts for a given underlying symbol).
-			//client.join("AAPL");
+    public static void main(String[] args) {
+        Client.Log("Starting sample app");
 
-			// Use this to subscribe, dynamically, to a specific option contract.
-			//client.join("AAP___230616P00250000");
+        // Create only the handlers/callbacks that you need
+        // These will get registered below
+        TradeHandler tradeHandler = new TradeHandler();
+        QuoteHandler quoteHandler = new QuoteHandler();
+        RefreshHandler refreshHandler = new RefreshHandler();
+        UnusualActivityHandler unusualActivityHandler = new UnusualActivityHandler();
 
-			// Use this to subscribe, dynamically, a list of specific option contracts or option chains.
-			//client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000", "TSLA"});
-			
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		
-		Timer timer = new Timer();
-		TimerTask task = new TimerTask() {
-			public void run() {
-				Client.Log(client.getStats());
-				String appStats = String.format(
-						"Messages (Trade = %d, Ask = %d, Bid = %d, Open Interest = %d, Block = %d, Sweep = %d, Large = %d)",
-						tradeHandler.tradeCount.get(),
-						quoteHandler.askCount.get(),
-						quoteHandler.bidCount.get(),
-						openInterestHandler.oiCount.get(),
-						unusualActivityHandler.blockCount.get(),
-						unusualActivityHandler.sweepCount.get(),
-						unusualActivityHandler.largeTradeCount.get());
-				Client.Log(appStats);
-			}
-		};
-		timer.schedule(task, 10000, 10000);
-	}
+        // You can either create a config class or default to using the intrinio/config.json file
+        //Config config = null;
+        //try {config = new Config("apiKeyHere", Provider.OPRA, null, null, 8);} catch (Exception e) {e.printStackTrace();}
+        //Client client = new Client(config);
+        Client client = new Client();
+
+        // Register a callback for a graceful shutdown
+        Runtime.getRuntime().addShutdownHook(new Thread( new Runnable() {
+            public void run() {
+                Client.Log("Stopping sample app");
+                client.stop();
+            }
+        }));
+
+        try {
+            // Register only the callbacks that you want.
+            // Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
+            client.setOnTrade(tradeHandler);
+            //client.setOnQuote(quoteHandler);
+            client.setOnRefresh(refreshHandler);
+            client.setOnUnusualActivity(unusualActivityHandler);
+
+            // Start the client
+            client.start();
+
+            // Use this to subscribe to a static list of symbols (option contracts) provided in config.json
+            //client.join();
+
+            // Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
+            //client.joinLobby();
+
+            // Use this to subscribe, dynamically, to an option chain (all option contracts for a given underlying symbol).
+            //client.join("AAPL");
+
+            // Use this to subscribe, dynamically, to a specific option contract.
+            //client.join("AAP___230616P00250000");
+
+            // Use this to subscribe, dynamically, a list of specific option contracts or option chains.
+            //client.join(new String[] {"GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000", "TSLA"});
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        Timer timer = new Timer();
+        TimerTask task = new TimerTask() {
+            public void run() {
+                Client.Log(client.getStats());
+                String appStats = String.format(
+                        "Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
+                        tradeHandler.tradeCount.get(),
+                        quoteHandler.quoteCount.get(),
+                        refreshHandler.rCount.get(),
+                        unusualActivityHandler.blockCount.get(),
+                        unusualActivityHandler.sweepCount.get(),
+                        unusualActivityHandler.largeTradeCount.get(),
+                        unusualActivityHandler.unusualSweepCount.get());
+                Client.Log(appStats);
+            }
+        };
+        timer.schedule(task, 10000, 10000);
+    }
 }
-
 ```
 
 ## Handling Quotes
 
 There are millions of options contracts, each with their own feed of activity.
-We highly encourage you to make your OnTrade, OnQuote, OnUnusualActivity, and OnOpenInterest methods has short as possible and follow a queue pattern so your app can handle the large volume of activity.
+We highly encourage you to make your OnTrade, OnQuote, OnUnusualActivity, and OnRefresh methods as short as possible and follow a queue pattern so your app can handle the large volume of activity.
 Note that quotes (ask and bid updates) comprise 99% of the volume of the entire feed. Be cautious when deciding to receive quote updates.
 
 ## Providers
@@ -180,72 +183,78 @@ Currently, Intrinio offers realtime data for this SDK from the following provide
 ### Trade Message
 
 ```java
-public record Trade(String symbol, double price, long size, long totalVolume, double timestamp)
+public record Trade(String contract, double price, long size, double timestamp, long totalVolume, double askPriceAtExecution, double bidPriceAtExecution, double underlyingPriceAtExecution)
 ```
 
-* **symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
+* **contract** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
 * **price** - the price in USD
 * **size** - the size of the last trade in hundreds (each contract is for 100 shares).
 * **totalVolume** - The number of contracts traded so far today.
 * **timestamp** - a Unix timestamp (with microsecond precision)
+* **askPriceAtExecution** - the last best ask price in USD at execution.
+* **bidPriceAtExecution** - the last best bid price in USD at execution.
+* **underlyingPriceAtExecution** - the price of the underlying security at execution.
 
 
 ### Quote Message
 
 ```java
-public record Quote(QuoteType type, String symbol, double price, long size, double timestamp)
+public record Quote(String contract, double askPrice, long askSize, double bidPrice, long bidSize, double timestamp)
 ```
 
-* **type** - the quote type
-  *    **`ask`** - represents an ask type
-  *    **`bid`** - represents a bid type  
-* **symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
-* **price** - the price in USD
-* **size** - the size of the last ask or bid in hundreds (each contract is for 100 shares).
+* **contract** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
+* **askPrice** - the last best ask price in USD
+* **askSize** - the last best ask size of the last ask or bid in hundreds (each contract is for 100 shares).
+* **bidPrice** - the last best bid price in USD
+* **bidSize** - the last best bid size of the last ask or bid in hundreds (each contract is for 100 shares).
 * **timestamp** - a Unix timestamp (with microsecond precision)
 
 
 ### Open Interest Message
 
 ```java
-public record OpenInterest (String symbol, int openInterest, double timestamp)
+public record Refresh (String contract, long openInterest, double openPrice, double closePrice, double highPrice, double lowPrice)
 ```
 
-* **symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
-* **timestamp** - a Unix timestamp (with microsecond precision)
+* **contract** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
 * **openInterest** - the total quantity of opened contracts as reported at the start of the trading day
+* **openPrice** - the opening price for the day
+* **closePrice** - the closing price for the day
+* **highPrice** - the current high price for the day 
+* **lowPrice** - the current low price for the day
 
 ### Unusual Activity Message
 ```java
 public record UnusualActivity(
-		String symbol,
-		UnusualActivityType type, 
-		UnusualActivitySentiment sentiment,
-		float totalValue,
-		long totalSize,
-		float averagePrice,
-		float askAtExecution,
-		float bidAtExecution,
-		float priceAtExecution,
-		double timestamp)
+        String contract,
+        UnusualActivityType type,
+        UnusualActivitySentiment sentiment,
+        double totalValue,
+        long totalSize,
+        double averagePrice,
+        double askPriceAtExecution,
+        double bidPriceAtExecution,
+        double underlyingPriceAtExecution,
+        double timestamp)
 ```
 
-* **Symbol** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
-* **Type** - The type of unusual activity that was detected
-  *    **`Block`** - represents an 'block' trade
-  *    **`Sweep`** - represents an intermarket sweep
-  *    **`Large`** - represents a trade of at least $100,000
-* **Sentiment** - The sentiment of the unusual activity event
+* **contract** - Identifier for the options contract.  This includes the ticker symbol, put/call, expiry, and strike price.
+* **type** - The type of unusual activity that was detected
+  * **`Block`** - represents an 'block' trade
+  * **`Sweep`** - represents an intermarket sweep
+  * **`Large`** - represents a trade of at least $100,000
+  * **`Unusual Sweep`** - represents an unusually large sweep near market open
+* **sentiment** - The sentiment of the unusual activity event
   *    **`Neutral`** - 
   *    **`Bullish`** - 
   *    **`Bearish`** - 
-* **TotalValue** - The total value of the trade in USD. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the value of the entire event.
-* **TotalValue** - The total size of the trade in number of contracts. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the total number of contracts exchanged during the event.
-* **AveragePrice** - The average price at which the trade was executed. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the average trade price for the entire event.
-* **AskAtExecution** - The 'ask' price of the underlying at execution of the trade event.
-* **BidAtExecution** - The 'bid' price of the underlying at execution of the trade event.
-* **PriceAtExecution** - The last trade price of the underlying at execution of the trade event.
-* **Timestamp** - a Unix timestamp (with microsecond precision).
+* **totalValue** - The total value of the trade in USD. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the value of the entire event.
+* **totalSize** - The total size of the trade in number of contracts. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the total number of contracts exchanged during the event.
+* **averagePrice** - The average price at which the trade was executed. 'Sweeps' and 'blocks' can be comprised of multiple trades. This is the average trade price for the entire event.
+* **askAtExecution** - The 'ask' price of the contract at execution of the trade event.
+* **bidAtExecution** - The 'bid' price of the contract at execution of the trade event.
+* **underlyingPriceAtExecution** - The last trade price of the underlying security at execution of the trade event.
+* **timestamp** - a Unix timestamp (with microsecond precision).
 
 ## API Keys
 
@@ -284,9 +293,9 @@ If you wish to perform a graceful shutdown of the application, please call the `
 * **Parameter** `onQuote`: The handler for quote events.
 * **Throws** `Exception`: If the start method has already been called. Or if `OnQuote` has already been set.
 
-`client.setOnOpenInterest(OnOpenInterest onOpenInterest) throws Exception` - Registers a callback that is invoked for open interest update. If no `onOpenInterest` callback is registered with this method, you will not receive open interest data from the server.
-* **Parameter** `onOpenInterest`: The handler for open interest events.
-* **Throws** `Exception`: If the start method has already been called. Or if `OnOpenInterest` has already been set.
+`client.setOnRefresh(OnRefresh onRefresh) throws Exception` - Registers a callback that is invoked for refresh update. If no `onRefresh` callback is registered with this method, you will not receive open interest, high, low, open, close data from the server.
+* **Parameter** `onRefresh`: The handler for refresh events.
+* **Throws** `Exception`: If the start method has already been called. Or if `OnRefresh` has already been set.
 
 `client.setOnUnusualActivity(OnUnusualActivity onUnusualActivity) throws Exception` - Registers a callback that is invoked for every unusual trade. If no `onUnusualActivity` callback is registered with this method, you will not receive unusual trade updates from the server.
 * **Parameter** `onUnusualActivity`: The handler for unusual trade events.
@@ -323,7 +332,7 @@ If you wish to perform a graceful shutdown of the application, please call the `
 ```json
 {
 	"apiKey": "",
-	"provider": "OPRA", //OPRA, or OPRA_FIREHOSE for subscribing to all channels
+	"provider": "OPRA", //OPRA, or MANUAL
 	"symbols": [ "GOOG__210917C01040000", "MSFT__210917C00180000", "AAPL__210917C00130000", "SPY" ], //Individual contracts (or option chains) to subscribe to all.
 	"numThreads": 4 //The number of threads to use for processing events.
 }

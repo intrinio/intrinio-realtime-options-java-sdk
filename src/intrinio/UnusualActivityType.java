@@ -5,5 +5,5 @@ public enum UnusualActivityType {
 	BLOCK,
 	SWEEP,
 	LARGE,
-	GOLDEN
+	UNUSUAL_SWEEP
 }
