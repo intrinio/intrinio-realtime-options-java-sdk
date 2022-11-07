@@ -82,10 +82,18 @@ enum PriceType {
     }
 
     double getScaledValue(int value){
+        if (value == 0b11111111_11111111_11111111_11111111
+                || value == 2147483647
+                || value == -2147483648)
+            return Double.NaN;
         return ((double) value) / ((double) getScale());
     }
 
     double getScaledValue(long value){
+        if (value == 0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111L
+                || value == 9223372036854775807L
+                || value == -9223372036854775808L)
+            return Double.NaN;
         return ((double) value) / ((double) getScale());
     }
 }
