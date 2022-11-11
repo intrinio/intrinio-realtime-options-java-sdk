@@ -3,7 +3,6 @@ package intrinio;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Array;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
@@ -78,7 +77,7 @@ record Token (String token, LocalDateTime date) {}
 
 public class Client implements WebSocket.Listener {
 	private final String EMPTY_STRING = "";
-	private final String LOBBY_CHANNEL = "$FIREHOSE";
+	private final String FIREHOSE_CHANNEL = "$FIREHOSE";
 	private final long[] selfHealBackoffs = {1000, 30000, 60000, 300000, 600000};
 	private final ReentrantReadWriteLock tLock = new ReentrantReadWriteLock();
 	private final ReentrantReadWriteLock wsLock = new ReentrantReadWriteLock();
@@ -534,31 +533,85 @@ public class Client implements WebSocket.Listener {
 		return (byte) optionMask;
 	}
 
+	private String trimStart(String str, char character){
+		boolean done = false;
+		int i = 0;
+		while (!done){
+			if (i >= str.length() || str.charAt(i) != character){ //short circuit prevents out of bounds
+				done = true;
+			}
+			else i++;
+		}
+		if (i == str.length())
+			return "";
+		else if (i == 0) {
+			return str;
+		} else
+			return str.substring(i);
+	}
+
+	private String trimTrailing(String str, char character){
+		boolean done = false;
+		int i = str.length()-1;
+		while (!done){
+			if (i < 0 || str.charAt(i) != character){ //short circuit prevents out of bounds
+				done = true;
+			}
+			else i--;
+		}
+		if (i == -1)
+			return "";
+		else if (i == str.length()-1) {
+			return str;
+		} else
+			return str.substring(0, i + 1);
+	}
+
+	private String translateContract(String contract){
+		if ((contract.length() <= 9) || (contract.indexOf(".")>=9)) {
+			return contract;
+		}
+		else { //this is of the old format and we need to translate it. ex: AAPL__220101C00140000, TSLA__221111P00195000
+			String symbol = trimTrailing(contract.substring(0, 6), '_');
+			String date = contract.substring(6, 12);
+			char callPut = contract.charAt(12);
+			String wholePrice = trimStart(contract.substring(13, 18), '0');
+			if (wholePrice.isEmpty())
+				wholePrice = "0";
+			String decimalPrice = contract.substring(18);
+			if (decimalPrice.charAt(2) == '0')
+				decimalPrice = decimalPrice.substring(0, 2);
+			return String.format("%s_%s%s%s.%s", symbol, date, callPut, wholePrice, decimalPrice);
+		}
+	}
+
 	private void _join(String symbol) {
-		if (channels.add(symbol)) {
+		String translatedSymbol = translateContract(symbol);
+		if (channels.add(translatedSymbol)) {
 			byte optionMask = getChannelOptionMask();
-			byte[] bytes = new byte[symbol.length() + 2];
+			byte[] bytes = new byte[translatedSymbol.length() + 2];
 			bytes[0] = (byte) 74;
 			bytes[1] = optionMask;
-			symbol.getBytes(StandardCharsets.US_ASCII);
-			System.arraycopy(symbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, symbol.length());
+			translatedSymbol.getBytes(StandardCharsets.US_ASCII);
+			System.arraycopy(translatedSymbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, translatedSymbol.length());
 
-			Client.Log("Websocket - Joining channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", symbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			Client.Log("Websocket - Joining channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", translatedSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
 			ByteBuffer message = ByteBuffer.wrap(bytes);
 			wsState.getWebSocket().sendBinary(message, true);
 		}
 	}
 		
 	private void _leave(String symbol) {
-		if (channels.remove(symbol)) {
+		String translatedSymbol = translateContract(symbol);
+		if (channels.remove(translatedSymbol)) {
 			byte optionMask = getChannelOptionMask();
-			byte[] bytes = new byte[symbol.length() + 2];
+			byte[] bytes = new byte[translatedSymbol.length() + 2];
 			bytes[0] = (byte) 76;
 			bytes[1] = optionMask;
-			symbol.getBytes(StandardCharsets.US_ASCII);
-			System.arraycopy(symbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, symbol.length());
+			translatedSymbol.getBytes(StandardCharsets.US_ASCII);
+			System.arraycopy(translatedSymbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, translatedSymbol.length());
 
-			Client.Log("Websocket - leaving channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", symbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			Client.Log("Websocket - leaving channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", translatedSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
 			ByteBuffer message = ByteBuffer.wrap(bytes);
 			wsState.getWebSocket().sendBinary(message, true);
 		}
@@ -675,7 +728,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	public void joinLobby() {
-		if (channels.contains(LOBBY_CHANNEL)) {
+		if (channels.contains(FIREHOSE_CHANNEL)) {
 			Client.Log("This client has already joined the lobby channel");
 		} else {
 			while (!this.allReady()) {
@@ -683,7 +736,7 @@ public class Client implements WebSocket.Listener {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) {}
 			}
-			this._join(LOBBY_CHANNEL);
+			this._join(FIREHOSE_CHANNEL);
 		}
 	}
 		
@@ -706,7 +759,7 @@ public class Client implements WebSocket.Listener {
 	}
 	
 	public void leaveLobby() {
-		if (channels.contains(LOBBY_CHANNEL)) this.leave(LOBBY_CHANNEL);
+		if (channels.contains(FIREHOSE_CHANNEL)) this.leave(FIREHOSE_CHANNEL);
 	}
 	
 	public void start() throws Exception {
