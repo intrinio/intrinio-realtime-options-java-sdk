@@ -7,27 +7,60 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
 public record Quote(String contract, double askPrice, long askSize, double bidPrice, long bidSize, double timestamp) {
-	
+	private static String formatContract(String functionalContract){
+		//Transform from server format to normal format
+		//From this: AAPL_201016C100.00 or ABC_201016C100.003
+		//To this:   AAPL__201016C00100000 or ABC___201016C00100003
+		char[] contractChars = new char[]{'_','_','_','_','_','_','2','2','0','1','0','1','C','0','0','0','0','0','0','0','0'};
+		int underscoreIndex = functionalContract.indexOf('_');
+
+		//copy symbol
+		functionalContract.getChars(0, underscoreIndex, contractChars, 0);
+
+		//copy date
+		functionalContract.getChars(underscoreIndex + 1, underscoreIndex + 7, contractChars, 6);
+
+		//copy put/call
+		functionalContract.getChars(underscoreIndex + 7, underscoreIndex + 8, contractChars, 12);
+
+		int decimalIndex = functionalContract.indexOf('.', 12);
+
+		//whole number copy
+		functionalContract.getChars(underscoreIndex + 8, decimalIndex, contractChars, 18 - (decimalIndex - underscoreIndex - 8));
+
+		//decimal number copy
+		functionalContract.getChars(decimalIndex + 1, functionalContract.length(), contractChars, 18);
+
+		return new String(contractChars);
+	}
+
 	public float getStrikePrice() {
-		return Float.parseFloat(this.contract.substring(this.contract.indexOf('_') + 8));
+		int whole = (this.contract.charAt(13) - '0') * 10000 + (this.contract.charAt(14) - '0') * 1000 + (this.contract.charAt(15) - '0') * 100 + (this.contract.charAt(16) - '0') * 10 + (this.contract.charAt(17) - '0');
+		float part = (this.contract.charAt(18) - '0') * 0.1f + (this.contract.charAt(19) - '0') * 0.01f + (this.contract.charAt(20) - '0') * 0.001f;
+		return (whole + part);
 	}
-	
-	public boolean isPut() { return this.contract.charAt(this.contract.indexOf('_') + 7) == 'P'; }
-	
+
+	public boolean isPut() {
+		return this.contract.charAt(12) == 'P';
+	}
+
 	public boolean isCall() {
-		return this.contract.charAt(this.contract.indexOf('_') + 7) == 'C';
+		return this.contract.charAt(12) == 'C';
 	}
-	
+
 	public ZonedDateTime getExpirationDate() {
-		int dateStartIndex = this.contract.indexOf('_') + 1;
-		int year = 2000 + (this.contract.charAt(dateStartIndex) - '0') * 10 + (this.contract.charAt(dateStartIndex + 1) - '0');
-		int month = (this.contract.charAt(dateStartIndex + 2) - '0') * 10 + (this.contract.charAt(dateStartIndex + 3) - '0');
-		int day = (this.contract.charAt(dateStartIndex + 4) - '0') * 10 + (this.contract.charAt(dateStartIndex + 5) - '0');
+		int year = 2000 + (this.contract.charAt(6) - '0') * 10 + (this.contract.charAt(7) - '0');
+		int month = (this.contract.charAt(8) - '0') * 10 + (this.contract.charAt(9) - '0');
+		int day = (this.contract.charAt(10) - '0') * 10 + (this.contract.charAt(11) - '0');
 		ZoneId tz = ZoneId.of("America/New_York");
 		return ZonedDateTime.of(year, month, day, 12, 0, 0, 0, tz);
 	}
-	
-	public String getUnderlyingSymbol() { return this.contract.substring(0, this.contract.indexOf('_')).trim(); }
+
+	public String getUnderlyingSymbol() {
+		int i;
+		for (i = 5; i >= 0 && this.contract.charAt(i) == '_'; i--);
+		return this.contract.substring(0,i+1);
+	}
 	
 	public String toString() {
 		return String.format("Quote (Contract: %s, AskPrice: %s, AskSize: %s, BidPrice: %s, BidSize: %s, Timestamp: %s)",
@@ -75,7 +108,7 @@ public record Quote(String contract, double askPrice, long askSize, double bidPr
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 
-		return new Quote(contract, askPrice, askSize, bidPrice, bidSize, timestamp);
+		return new Quote(Quote.formatContract(contract), askPrice, askSize, bidPrice, bidSize, timestamp);
 	}
 
 	public static Quote parse(ByteBuffer bytes) {
@@ -114,7 +147,7 @@ public record Quote(String contract, double askPrice, long askSize, double bidPr
 		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
 
-		return new Quote(contract, askPrice, askSize, bidPrice, bidSize, timestamp);
+		return new Quote(Quote.formatContract(contract), askPrice, askSize, bidPrice, bidSize, timestamp);
 	}
 	
 }
