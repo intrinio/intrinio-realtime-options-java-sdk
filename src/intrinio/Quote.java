@@ -23,7 +23,7 @@ public record Quote(String contract, double askPrice, long askSize, double bidPr
 		//copy put/call
 		functionalContract.getChars(underscoreIndex + 7, underscoreIndex + 8, contractChars, 12);
 
-		int decimalIndex = functionalContract.indexOf('.', 12);
+		int decimalIndex = functionalContract.indexOf('.', 9);
 
 		//whole number copy
 		functionalContract.getChars(underscoreIndex + 8, decimalIndex, contractChars, 18 - (decimalIndex - underscoreIndex - 8));
