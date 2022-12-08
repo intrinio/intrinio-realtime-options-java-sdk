@@ -29,7 +29,7 @@ public class Config {
 		if (this.provider == Provider.NONE) {
 			throw new Exception("You must specify a valid provider");
 		}
-		if (((this.provider == Provider.MANUAL) || (this.provider == Provider.MANUAL_FIREHOSE)) && this.ipAddress.isBlank()) {
+		if ((this.provider == Provider.MANUAL) && this.ipAddress.isBlank()) {
 			throw new Exception("You must specify an IP address for manual configuration");
 		}
 	}
