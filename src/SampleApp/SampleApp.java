@@ -16,25 +16,18 @@ class TradeHandler implements OnTrade {
 }
 
 class QuoteHandler implements OnQuote {
-	public AtomicInteger askCount = new AtomicInteger(0);
-	public AtomicInteger bidCount = new AtomicInteger(0);
+	public AtomicInteger quoteCount = new AtomicInteger(0);
 	
 	public void onQuote(Quote quote) {
-		if (quote.type() == QuoteType.ASK) {
-			askCount.incrementAndGet();
-		} else if (quote.type() == QuoteType.BID) {
-			bidCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid quote type detected: %s", quote.type().toString());
-		}
+		quoteCount.incrementAndGet();
 	}
 }
 
-class OpenInterestHandler implements OnOpenInterest {
-	public AtomicInteger oiCount = new AtomicInteger(0);
-	
-	public void onOpenInterest(OpenInterest oi) {
-		oiCount.incrementAndGet();
+class RefreshHandler implements OnRefresh {
+	public AtomicInteger rCount = new AtomicInteger(0);
+
+	public void onRefresh(Refresh r) {
+		rCount.incrementAndGet();
 	}
 }
 
@@ -42,16 +35,25 @@ class UnusualActivityHandler implements OnUnusualActivity {
 	public AtomicInteger blockCount = new AtomicInteger(0);
 	public AtomicInteger sweepCount = new AtomicInteger(0);
 	public AtomicInteger largeTradeCount = new AtomicInteger(0);
+	public AtomicInteger unusualSweepCount = new AtomicInteger(0);
 	
 	public void onUnusualActivity(UnusualActivity ua) {
-		if (ua.type() == UnusualActivityType.BLOCK) {
-			blockCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.SWEEP) {
-			sweepCount.incrementAndGet();
-		} else if (ua.type() == UnusualActivityType.LARGE) {
-			largeTradeCount.incrementAndGet();
-		} else {
-			Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+		switch (ua.type()){
+			case BLOCK:
+				blockCount.incrementAndGet();
+				break;
+			case SWEEP:
+				sweepCount.incrementAndGet();
+				break;
+			case LARGE:
+				largeTradeCount.incrementAndGet();
+				break;
+			case UNUSUAL_SWEEP:
+				unusualSweepCount.incrementAndGet();
+				break;
+			default:
+				Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+				break;
 		}
 	}
 }
@@ -65,7 +67,7 @@ public class SampleApp {
 		// These will get registered below
 		TradeHandler tradeHandler = new TradeHandler();
 		QuoteHandler quoteHandler = new QuoteHandler();
-		OpenInterestHandler openInterestHandler = new OpenInterestHandler();
+		RefreshHandler refreshHandler = new RefreshHandler();
 		UnusualActivityHandler unusualActivityHandler = new UnusualActivityHandler();
 		
 		// You can either create a config class or default to using the intrinio/config.json file
@@ -86,15 +88,15 @@ public class SampleApp {
 			// Register only the callbacks that you want.
 			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
 			client.setOnTrade(tradeHandler);
-			//client.setOnQuote(quoteHandler);
-			//client.setOnOpenInterest(openInterestHandler);
+			client.setOnQuote(quoteHandler);
+			client.setOnRefresh(refreshHandler);
 			client.setOnUnusualActivity(unusualActivityHandler);
 			
 			// Start the client
 			client.start();
 			
 			// Use this to subscribe to a static list of symbols (option contracts) provided in config.json
-			//client.join();
+			client.join();
 			
 			// Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
 			//client.joinLobby();
@@ -117,14 +119,14 @@ public class SampleApp {
 			public void run() {
 				Client.Log(client.getStats());
 				String appStats = String.format(
-						"Messages (Trade = %d, Ask = %d, Bid = %d, Open Interest = %d, Block = %d, Sweep = %d, Large = %d)",
+						"Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
 						tradeHandler.tradeCount.get(),
-						quoteHandler.askCount.get(),
-						quoteHandler.bidCount.get(),
-						openInterestHandler.oiCount.get(),
+						quoteHandler.quoteCount.get(),
+						refreshHandler.rCount.get(),
 						unusualActivityHandler.blockCount.get(),
 						unusualActivityHandler.sweepCount.get(),
-						unusualActivityHandler.largeTradeCount.get());
+						unusualActivityHandler.largeTradeCount.get(),
+						unusualActivityHandler.unusualSweepCount.get());
 				Client.Log(appStats);
 			}
 		};
