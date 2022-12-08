@@ -88,7 +88,7 @@ public class SampleApp {
 			// Register only the callbacks that you want.
 			// Take special care when registering the 'OnQuote' handler as it will increase throughput by ~10x
 			client.setOnTrade(tradeHandler);
-			//client.setOnQuote(quoteHandler);
+			client.setOnQuote(quoteHandler);
 			client.setOnRefresh(refreshHandler);
 			client.setOnUnusualActivity(unusualActivityHandler);
 			
@@ -96,7 +96,7 @@ public class SampleApp {
 			client.start();
 			
 			// Use this to subscribe to a static list of symbols (option contracts) provided in config.json
-			//client.join();
+			client.join();
 			
 			// Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
 			//client.joinLobby();
