@@ -6,7 +6,53 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public record Quote(String contract, double askPrice, long askSize, double bidPrice, long bidSize, double timestamp) {
+public class Quote{
+	public final String contract;
+	public final double askPrice;
+	public final long askSize;
+	public final double bidPrice;
+	public final long bidSize;
+	public final double timestamp;
+	public Quote(String contract, double askPrice, long askSize, double bidPrice, long bidSize, double timestamp){
+		this.contract = contract;
+		this.askPrice = askPrice;
+		this.askSize = askSize;
+		this.bidPrice = bidPrice;
+		this.bidSize = bidSize;
+		this.timestamp = timestamp;
+	}
+
+	public String getContract(){return this.contract;}
+	public double getAskPrice(){return this.askPrice;}
+	public long getAskSize(){return this.askSize;}
+	public double getBidPrice(){return this.bidPrice;}
+	public long getBidSize(){return this.bidSize;}
+	public double getTimestamp(){return this.timestamp;}
+
+	public boolean equals(Object obj){
+		if (this == obj)
+			return true;
+
+		if (obj == null)
+			return false;
+
+		if (getClass() != obj.getClass())
+			return false;
+
+		Quote other = (Quote) obj;
+
+		return this.contract == other.contract
+				&& this.askPrice == other.askPrice
+				&& this.askSize == other.askSize
+				&& this.bidPrice == other.bidPrice
+				&& this.bidSize == other.bidSize
+				&& this.timestamp == other.timestamp;
+	}
+
+	public int hashCode(){
+		return contract.hashCode() ^ Double.hashCode(askPrice) ^ Long.hashCode(askSize) ^ Double.hashCode(bidPrice) ^ Long.hashCode(bidSize) ^ Double.hashCode(timestamp);
+	}
+
 	private static String formatContract(String functionalContract){
 		//Transform from server format to normal format
 		//From this: AAPL_201016C100.00 or ABC_201016C100.003
@@ -110,44 +156,4 @@ public record Quote(String contract, double askPrice, long askSize, double bidPr
 
 		return new Quote(Quote.formatContract(contract), askPrice, askSize, bidPrice, bidSize, timestamp);
 	}
-
-	public static Quote parse(ByteBuffer bytes) {
-		//byte structure:
-		// contract length [0]
-		// contract [1-21]
-		// event type [22]
-		// price type [23]
-		// ask price [24-27]
-		// ask size [28-31]
-		// bid price [32-35]
-		// bid size [36-39]
-		// timestamp [40-47]
-
-		String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
-
-		PriceType scaler = PriceType.fromInt(bytes.get(23));
-		
-		ByteBuffer askPriceBuffer = bytes.slice(24, 4);
-		askPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double askPrice = scaler.getScaledValue(askPriceBuffer.getInt());
-		
-		ByteBuffer askSizeBuffer = bytes.slice(28, 4);
-		askSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		long askSize = Integer.toUnsignedLong(askSizeBuffer.getInt());
-
-		ByteBuffer bidPriceBuffer = bytes.slice(32, 4);
-		bidPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double bidPrice = scaler.getScaledValue(bidPriceBuffer.getInt());
-
-		ByteBuffer bidSizeBuffer = bytes.slice(36, 4);
-		bidSizeBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		long bidSize = Integer.toUnsignedLong(bidSizeBuffer.getInt());
-		
-		ByteBuffer timeStampBuffer = bytes.slice(40, 8);
-		timeStampBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		double timestamp = ((double) timeStampBuffer.getLong()) / 1_000_000_000.0D;
-
-		return new Quote(Quote.formatContract(contract), askPrice, askSize, bidPrice, bidSize, timestamp);
-	}
-	
 }

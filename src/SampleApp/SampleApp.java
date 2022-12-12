@@ -38,7 +38,7 @@ class UnusualActivityHandler implements OnUnusualActivity {
 	public AtomicInteger unusualSweepCount = new AtomicInteger(0);
 	
 	public void onUnusualActivity(UnusualActivity ua) {
-		switch (ua.type()){
+		switch (ua.getType()){
 			case BLOCK:
 				blockCount.incrementAndGet();
 				break;
@@ -52,7 +52,7 @@ class UnusualActivityHandler implements OnUnusualActivity {
 				unusualSweepCount.incrementAndGet();
 				break;
 			default:
-				Client.Log("Sample App - Invalid UA type detected: %s", ua.type().toString());
+				Client.Log("Sample App - Invalid UA type detected: %s", ua.getType().toString());
 				break;
 		}
 	}

@@ -6,7 +6,54 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public record Refresh (String contract, long openInterest, double openPrice, double closePrice, double highPrice, double lowPrice){
+public class Refresh {
+    private final String contract;
+    private final long openInterest;
+    private final double openPrice;
+    private final double closePrice;
+    private final double highPrice;
+    private final double lowPrice;
+
+    public Refresh(String contract, long openInterest, double openPrice, double closePrice, double highPrice, double lowPrice){
+        this.contract = contract;
+        this.openInterest = openInterest;
+        this.openPrice = openPrice;
+        this.closePrice = closePrice;
+        this.highPrice = highPrice;
+        this.lowPrice = lowPrice;
+    }
+
+    public String getContract(){return this.contract;}
+    public long getOpenInterest(){return this.openInterest;}
+    public double getOpenPrice(){return this.openPrice;}
+    public double getClosePrice(){return this.closePrice;}
+    public double getHighPrice(){return this.highPrice;}
+    public double getLowPrice(){return this.lowPrice;}
+
+    public boolean equals(Object obj){
+        if (this == obj)
+            return true;
+
+        if (obj == null)
+            return false;
+
+        if (getClass() != obj.getClass())
+            return false;
+
+        Refresh other = (Refresh) obj;
+
+        return this.contract == other.contract
+                && this.openInterest == other.openInterest
+                && this.openPrice == other.openPrice
+                && this.closePrice == other.closePrice
+                && this.highPrice == other.highPrice
+                && this.lowPrice == other.lowPrice;
+    }
+
+    public int hashCode(){
+        return contract.hashCode() ^ Long.hashCode(openInterest) ^ Double.hashCode(openPrice) ^ Double.hashCode(closePrice) ^ Double.hashCode(highPrice) ^ Double.hashCode(lowPrice);
+    }
+
     private static String formatContract(String functionalContract){
         //Transform from server format to normal format
         //From this: AAPL_201016C100.00 or ABC_201016C100.003
@@ -105,45 +152,6 @@ public record Refresh (String contract, long openInterest, double openPrice, dou
         double highPrice = scaler.getScaledValue(highPriceBuffer.getInt());
 
         ByteBuffer lowPriceBuffer = ByteBuffer.wrap(bytes, 40, 4);
-        lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-        double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
-
-        return new Refresh(Refresh.formatContract(contract), openInterest, openPrice, closePrice, highPrice, lowPrice);
-    }
-
-    public static Refresh parse(ByteBuffer bytes) {
-        //byte structure:
-        // contract length [0]
-        // contract [1-21]
-        // event type [22]
-        // price type [23]
-        // open interest [24-27]
-        // open price [28-31]
-        // close price [32-35]
-        // high price [36-39]
-        // low price [40-43]
-
-        String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
-
-        PriceType scaler = PriceType.fromInt(bytes.get(23));
-
-        ByteBuffer openInterestBuffer = bytes.slice(24, 4);
-        openInterestBuffer.order(ByteOrder.LITTLE_ENDIAN);
-        long openInterest = Integer.toUnsignedLong(openInterestBuffer.getInt());
-
-        ByteBuffer openPriceBuffer = bytes.slice(28, 4);
-        openPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-        double openPrice = scaler.getScaledValue(openPriceBuffer.getInt());
-
-        ByteBuffer closePriceBuffer = bytes.slice(32, 4);
-        closePriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-        double closePrice = scaler.getScaledValue(closePriceBuffer.getInt());
-
-        ByteBuffer highPriceBuffer = bytes.slice(36, 4);
-        highPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
-        double highPrice = scaler.getScaledValue(highPriceBuffer.getInt());
-
-        ByteBuffer lowPriceBuffer = bytes.slice(40, 4);
         lowPriceBuffer.order(ByteOrder.LITTLE_ENDIAN);
         double lowPrice = scaler.getScaledValue(lowPriceBuffer.getInt());
 

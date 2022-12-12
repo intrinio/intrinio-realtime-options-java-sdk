@@ -73,7 +73,38 @@ class WebSocketState {
 	}
 }
 
-record Token (String token, LocalDateTime date) {}
+class Token{
+	private final String token;
+	private final LocalDateTime date;
+
+	public Token(String token, LocalDateTime date){
+		this.token = token;
+		this.date = date;
+	}
+
+	public String getToken(){return this.token;}
+	public LocalDateTime getDate(){return this.date;}
+
+	public boolean equals(Object obj){
+		if (this == obj)
+			return true;
+
+		if (obj == null)
+			return false;
+
+		if (getClass() != obj.getClass())
+			return false;
+
+		Token other = (Token)obj;
+
+		return this.token == other.token
+				&& this.date == other.date;
+	}
+
+	public int hashCode(){
+		return this.token.hashCode() ^ this.date.hashCode();
+	}
+}
 
 public class Client implements WebSocket.Listener {
 	private final String EMPTY_STRING = "";
@@ -178,31 +209,47 @@ public class Client implements WebSocket.Listener {
 						byte type = datum[offset + 22];
 						ByteBuffer offsetBuffer;
 						if (type == 1) {
-							offsetBuffer = buffer.slice(offset, QUOTE_MESSAGE_SIZE);
-							Quote quote = Quote.parse(offsetBuffer);
+							byte[] quoteBytes = new byte[QUOTE_MESSAGE_SIZE];
+							int currPos = buffer.position();
+							buffer.position(currPos + offset);
+							buffer.get(quoteBytes, 0, QUOTE_MESSAGE_SIZE);
+							buffer.position(currPos);
+							Quote quote = Quote.parse(quoteBytes);
 							offset += QUOTE_MESSAGE_SIZE;
 							if (useOnQuote) onQuote.onQuote(quote);
 						}
 						else if (type == 0) {
-							offsetBuffer = buffer.slice(offset, TRADE_MESSAGE_SIZE);
-							Trade trade = Trade.parse(offsetBuffer);
+							byte[] tradeBytes = new byte[TRADE_MESSAGE_SIZE];
+							int currPos = buffer.position();
+							buffer.position(currPos + offset);
+							buffer.get(tradeBytes, 0, TRADE_MESSAGE_SIZE);
+							buffer.position(currPos);
+							Trade trade = Trade.parse(tradeBytes);
 							offset += TRADE_MESSAGE_SIZE;
 							if (useOnTrade) onTrade.onTrade(trade);
 						}
 						else if (type > 2) {
-							offsetBuffer = buffer.slice(offset, UNUSUAL_ACTIVITY_MESSAGE_SIZE);
-							UnusualActivity ua = UnusualActivity.parse(offsetBuffer);
+							byte[] uaBytes = new byte[UNUSUAL_ACTIVITY_MESSAGE_SIZE];
+							int currPos = buffer.position();
+							buffer.position(currPos + offset);
+							buffer.get(uaBytes, 0, UNUSUAL_ACTIVITY_MESSAGE_SIZE);
+							buffer.position(currPos);
+							UnusualActivity ua = UnusualActivity.parse(uaBytes);
 							offset += UNUSUAL_ACTIVITY_MESSAGE_SIZE;
 							if (useOnUnusualActivity) onUnusualActivity.onUnusualActivity(ua);
 						}
 						else if (type == 2) {
-							offsetBuffer = buffer.slice(offset, REFRESH_MESSAGE_SIZE);
-							Refresh r = Refresh.parse(offsetBuffer);
+							byte[] refreshBytes = new byte[REFRESH_MESSAGE_SIZE];
+							int currPos = buffer.position();
+							buffer.position(currPos + offset);
+							buffer.get(refreshBytes, 0, REFRESH_MESSAGE_SIZE);
+							buffer.position(currPos);
+							Refresh r = Refresh.parse(refreshBytes);
 							offset += REFRESH_MESSAGE_SIZE;
 							if (useOnRefresh) onRefresh.onRefresh(r);
 						}
 						else {
-							Client.Log("Error parsing multi-part message. Type is %d", type);							
+							Client.Log("Error parsing multi-part message. Type is %d", type);
 							i = count;
 						}
 					}
@@ -317,15 +364,15 @@ public class Client implements WebSocket.Listener {
 		tLock.readLock().lock();
 		try {
 			Token token = this.token.get();
-			if (LocalDateTime.now().minusDays(1).compareTo(token.date()) > 0) {
-				return token.token();
+			if (LocalDateTime.now().minusDays(1).compareTo(token.getDate()) > 0) {
+				return token.getToken();
 			} else {
 				tLock.readLock().unlock();
 				tLock.writeLock().lock();
 				try {
 					doBackoff(this.trySetToken);
 					tLock.readLock().lock();
-					return this.token.get().token();
+					return this.token.get().getToken();
 				} finally {
 					tLock.writeLock().unlock();
 				}
@@ -351,7 +398,7 @@ public class Client implements WebSocket.Listener {
 					String token = this.getToken();
 					resetWebSocket(token);
 				} else {
-					resetWebSocket(this.token.get().token());
+					resetWebSocket(this.token.get().getToken());
 				}
 				return false;
 			}
