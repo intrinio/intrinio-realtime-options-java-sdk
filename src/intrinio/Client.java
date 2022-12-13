@@ -29,8 +29,6 @@ import java.util.Queue;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.google.gson.Gson;
-
 class WebSocketState {
 	
 	private WebSocket ws;
@@ -445,11 +443,9 @@ public class Client implements WebSocket.Listener {
 		
 	public CompletionStage<Void> onText(WebSocket ws, CharSequence data, boolean isComplete) {
 		textMsgCount.addAndGet(1l);
-		if (data.length() > 0) {
+		if (data != null && data.length() > 0) {
 			try {
-				Gson gson = new Gson();
-				ErrorMessage errorMessage = gson.fromJson(data.toString(), ErrorMessage.class);
-				Client.Log("Error received: %s", errorMessage.getPayload().getResponse());
+				Client.Log("Error received: %s", data.toString());
 				ws.request(1);
 			}
 			catch (Exception e) {
@@ -614,11 +610,43 @@ public class Client implements WebSocket.Listener {
 			return str.substring(0, i + 1);
 	}
 
-	private String translateContract(String contract){
+	private String translateContractToStandardFormat(String contract){
+		if ((contract.length() >= 9) && (contract.indexOf(".")>=9)) { //this is of the server format and we need to translate it. ex: from ABC_221216P145.00 to AAPL__220101C00140000
+			//Transform from server format to normal format
+			//From this: AAPL_201016C100.00 or ABC_201016C100.003
+			//To this:   AAPL__201016C00100000 or ABC___201016C00100003
+			char[] contractChars = new char[]{'_','_','_','_','_','_','2','2','0','1','0','1','C','0','0','0','0','0','0','0','0'};
+			int underscoreIndex = contract.indexOf('_');
+
+			//copy symbol
+			contract.getChars(0, underscoreIndex, contractChars, 0);
+
+			//copy date
+			contract.getChars(underscoreIndex + 1, underscoreIndex + 7, contractChars, 6);
+
+			//copy put/call
+			contract.getChars(underscoreIndex + 7, underscoreIndex + 8, contractChars, 12);
+
+			int decimalIndex = contract.indexOf('.', 9);
+
+			//whole number copy
+			contract.getChars(underscoreIndex + 8, decimalIndex, contractChars, 18 - (decimalIndex - underscoreIndex - 8));
+
+			//decimal number copy
+			contract.getChars(decimalIndex + 1, contract.length(), contractChars, 18);
+
+			return new String(contractChars);
+		}
+		else { //this is of the standard format already: AAPL__220101C00140000, TSLA__221111P00195000
+			return contract;
+		}
+	}
+
+	private String translateContractToServerFormat(String contract){
 		if ((contract.length() <= 9) || (contract.indexOf(".")>=9)) {
 			return contract;
 		}
-		else { //this is of the old format and we need to translate it. ex: AAPL__220101C00140000, TSLA__221111P00195000
+		else { //this is of the standard format and we need to translate it. ex from AAPL__220101C00140000, TSLA__221111P00195000 to ABC_221216P145.00
 			String symbol = trimTrailing(contract.substring(0, 6), '_');
 			String date = contract.substring(6, 12);
 			char callPut = contract.charAt(12);
@@ -633,7 +661,8 @@ public class Client implements WebSocket.Listener {
 	}
 
 	private void _join(String symbol) {
-		String translatedSymbol = translateContract(symbol);
+		String translatedSymbol = translateContractToServerFormat(symbol);
+		String standardFormatSymbol = translateContractToStandardFormat(translatedSymbol);
 		if (channels.add(translatedSymbol)) {
 			byte optionMask = getChannelOptionMask();
 			byte[] bytes = new byte[translatedSymbol.length() + 2];
@@ -642,14 +671,15 @@ public class Client implements WebSocket.Listener {
 			translatedSymbol.getBytes(StandardCharsets.US_ASCII);
 			System.arraycopy(translatedSymbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, translatedSymbol.length());
 
-			Client.Log("Websocket - Joining channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", translatedSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			Client.Log("Websocket - Joining channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", standardFormatSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
 			ByteBuffer message = ByteBuffer.wrap(bytes);
 			wsState.getWebSocket().sendBinary(message, true);
 		}
 	}
-		
+
 	private void _leave(String symbol) {
-		String translatedSymbol = translateContract(symbol);
+		String translatedSymbol = translateContractToServerFormat(symbol);
+		String standardFormatSymbol = translateContractToStandardFormat(translatedSymbol);
 		if (channels.remove(translatedSymbol)) {
 			byte optionMask = getChannelOptionMask();
 			byte[] bytes = new byte[translatedSymbol.length() + 2];
@@ -658,7 +688,7 @@ public class Client implements WebSocket.Listener {
 			translatedSymbol.getBytes(StandardCharsets.US_ASCII);
 			System.arraycopy(translatedSymbol.getBytes(StandardCharsets.US_ASCII), 0, bytes, 2, translatedSymbol.length());
 
-			Client.Log("Websocket - leaving channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", translatedSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
+			Client.Log("Websocket - leaving channel: %s (Trades: %s, Quotes: %s, Refreshes: %s, Unusual Activity: %s)", standardFormatSymbol, useOnTrade, useOnQuote, useOnRefresh, useOnUnusualActivity);
 			ByteBuffer message = ByteBuffer.wrap(bytes);
 			wsState.getWebSocket().sendBinary(message, true);
 		}
@@ -738,20 +768,6 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 
-	public void join() {
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
-		String[] symbols = config.getSymbols();
-		for (String symbol : symbols) {
-			if (!this.channels.contains(symbol)) {
-				this._join(symbol);
-			}
-		}
-	}
-		
 	public void join(String symbol) {
 		if (!symbol.isBlank()) {
 			while (!this.allReady()) {
@@ -759,21 +775,20 @@ public class Client implements WebSocket.Listener {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) {}
 			}
-			if (!channels.contains(symbol)) this._join(symbol);
+			this._join(symbol);
 		}
 	}
-		
+
 	public void join(String[] symbols) {
-		while (!this.allReady()) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {}
-		}
 		for (String symbol : symbols) {
-			if (!channels.contains(symbol)) this._join(symbol);
+			this.join(symbol);
 		}
 	}
-	
+
+	public void join() {
+		this.join(config.getSymbols());
+	}
+
 	public void joinLobby() {
 		if (channels.contains(FIREHOSE_CHANNEL)) {
 			Client.Log("This client has already joined the lobby channel");
@@ -786,25 +801,24 @@ public class Client implements WebSocket.Listener {
 			this._join(FIREHOSE_CHANNEL);
 		}
 	}
-		
-	public void leave() {
-		for (String channel : this.channels) {
-			this._leave(channel);
-		}
-	}
-		
+
 	public void leave(String symbol) {
 		if (!symbol.isBlank()) {
-			if (channels.contains(symbol)) this._leave(symbol);
+			this._leave(symbol);
 		}
 	}
-		
+
 	public void leave(String[] symbols) {
 		for (String symbol : symbols) {
-			if (channels.contains(symbol)) this._leave(symbol);
+			this.leave(symbol);
 		}
 	}
-	
+
+	public void leave() {
+		for (String channel : this.channels) {
+			this.leave(channel);
+		}
+	}
 	public void leaveLobby() {
 		if (channels.contains(FIREHOSE_CHANNEL)) this.leave(FIREHOSE_CHANNEL);
 	}
