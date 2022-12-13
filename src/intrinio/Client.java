@@ -564,7 +564,7 @@ public class Client implements WebSocket.Listener {
 	}
 
 	private String translateContractToStandardFormat(String contract){
-		if ((contract.length() <= 9) || (contract.indexOf(".")>=9)) { //this is of the server format and we need to translate it. ex: from ABC_221216P145.00 to AAPL__220101C00140000
+		if ((contract.length() >= 9) && (contract.indexOf(".")>=9)) { //this is of the server format and we need to translate it. ex: from ABC_221216P145.00 to AAPL__220101C00140000
 			//Transform from server format to normal format
 			//From this: AAPL_201016C100.00 or ABC_201016C100.003
 			//To this:   AAPL__201016C00100000 or ABC___201016C00100003

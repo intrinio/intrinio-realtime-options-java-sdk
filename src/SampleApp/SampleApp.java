@@ -79,6 +79,7 @@ public class SampleApp {
 		// Register a callback for a graceful shutdown
 		Runtime.getRuntime().addShutdownHook(new Thread( new Runnable() {
 			public void run() {
+				client.leave();
 				Client.Log("Stopping sample app");
 				client.stop();
 			}
