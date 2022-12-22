@@ -74,7 +74,7 @@ public record UnusualActivity(
 	}
 	
 	public String toString() {
-		return String.format("Quote (Contract: %s, Type: %s, Sentiment: %s, TotalValue: %s, TotalSize: %s, AveragePrice: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s, Timestamp: %s)",
+		return String.format("Unusual Activity (Contract: %s, Type: %s, Sentiment: %s, TotalValue: %s, TotalSize: %s, AveragePrice: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s, Timestamp: %s)",
 				this.contract,
 				this.type,
 				this.sentiment,

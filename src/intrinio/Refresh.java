@@ -63,7 +63,7 @@ public record Refresh (String contract, long openInterest, double openPrice, dou
     }
 
     public String toString() {
-        return String.format("Quote (Contract: %s, OpenInterest: %s, OpenPrice: %s, ClosePrice: %s, HighPrice: %s, LowPrice: %s)",
+        return String.format("Refresh (Contract: %s, OpenInterest: %s, OpenPrice: %s, ClosePrice: %s, HighPrice: %s, LowPrice: %s)",
                 this.contract,
                 this.openInterest,
                 this.openPrice,
