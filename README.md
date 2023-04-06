@@ -7,6 +7,13 @@ SDK for working with Intrinio's realtime options feed via WebSocket
 
 - Java 14+
 
+## Docker
+Add your API key to the config.json file in src/intrinio, then
+```
+docker compose build
+docker compose run example
+```
+
 ## Installation
 
 Go to [Release](https://github.com/intrinio/intrinio-realtime-options-java-sdk/releases/), download the JAR, reference it in your project. The JAR contains dependencies necessary to the SDK.

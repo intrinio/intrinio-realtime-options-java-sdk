@@ -1,5 +1,7 @@
 package SampleApp;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -118,9 +120,13 @@ public class SampleApp {
 		Timer timer = new Timer();
 		TimerTask task = new TimerTask() {
 			public void run() {
-				Client.Log(client.getStats());
+				DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+				LocalDateTime now = LocalDateTime.now();
+				String date = dtf.format(now);
+				Client.Log(date + " " + client.getStats());
 				String appStats = String.format(
-						"Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
+						"%s Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
+						date,
 						tradeHandler.tradeCount.get(),
 						quoteHandler.quoteCount.get(),
 						refreshHandler.rCount.get(),

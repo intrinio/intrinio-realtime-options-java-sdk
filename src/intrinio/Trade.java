@@ -63,7 +63,7 @@ public record Trade(String contract, double price, long size, double timestamp, 
 	}
 	
 	public String toString() {
-		return String.format("Quote (Contract: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
+		return String.format("Trade (Contract: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
 				this.contract,
 				this.price,
 				this.size,
