@@ -123,7 +123,7 @@ public class SampleApp {
 				DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 				LocalDateTime now = LocalDateTime.now();
 				String date = dtf.format(now);
-				Client.Log(date + client.getStats());
+				Client.Log(date + " " + client.getStats());
 				String appStats = String.format(
 						"%s Messages (Trades = %d, Quotes = %d, Refreshes = %d, Blocks = %d, Sweeps = %d, Larges = %d, UnusualSweeps = %d)",
 						date,
