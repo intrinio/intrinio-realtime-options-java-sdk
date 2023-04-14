@@ -159,6 +159,10 @@ public class Client implements WebSocket.Listener {
 	public CompletionStage<Void> onClose(WebSocket ws, int status, String reason) {
 		wsLock.writeLock().lock();
 		try {
+			try {
+				this.wsState.getWebSocket().sendClose(1000, "Client closed");
+			}catch (Exception ex){}
+
 			if (!wsState.isReconnecting()) {
 				Client.Log("Websocket - Closed");
 				wsState.setReady(false);
@@ -182,9 +186,9 @@ public class Client implements WebSocket.Listener {
 		try {
 			Client.Log("Websocket - Error - %s", err.getMessage());
 			ws.request(1);
-		}
-		catch (InterruptedException ex){//TODO catch the disconnect error seperately and reconnect
-			wsState.getWebSocket().sendClose(1000, "Websocket - Error");
+			if (err.getMessage() == "Connection reset"){
+				onClose(ws, 1000, "Websocket - Error");
+			}
 		}
 		catch (Exception e){
 			Client.Log("Websocket - Error - %s", e.getMessage());
@@ -300,7 +304,7 @@ public class Client implements WebSocket.Listener {
 		}
 		Client.Log("Websocket - Closing");
 		stopThreads(); //this sets isCancellationRequested = true so the following close event doesn't try to reconnect
-		wsState.getWebSocket().sendClose(1000, "Client closed");
+		onClose(this.wsState.getWebSocket(), 1000, "Websocket - Error");
 		Client.Log("Stopped");
 	}
 	//endregion Public Methods
