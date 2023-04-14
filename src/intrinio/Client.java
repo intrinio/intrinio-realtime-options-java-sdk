@@ -515,41 +515,6 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 
-//	private void resetWebSocket(String token) {
-//		Client.Log("Websocket - Resetting");
-//		String wsUrl;
-//		try {
-//			wsUrl = this.getWebSocketUrl(token);
-//		} catch (Exception e) {
-//			Client.Log("Reset Failure. " + e.getMessage());
-//			return;
-//		}
-//		URI uri = null;
-//		try {
-//			uri = new URI(wsUrl);
-//		} catch (URISyntaxException e) {
-//			Client.Log("Reset Failure. Bad URL (%s). %s", wsUrl, e.getMessage());
-//			return;
-//		}
-//		HttpClient client = HttpClient.newHttpClient();
-//		CompletableFuture<WebSocket> task = client.newWebSocketBuilder().buildAsync(uri, (WebSocket.Listener) this);
-//		try {
-//			wsLock.writeLock().lock();
-//			try {
-//				WebSocket ws = task.get();
-//				wsState.setWebSocket(ws);
-//				Client.Log("Websocket - Reset");
-//				this.onWebSocketConnected(ws, wsState);
-//			} finally {
-//				wsLock.writeLock().unlock();
-//			}
-//		} catch (ExecutionException e) {
-//			Client.Log("Reset Failure. Could not establish connection. %s", e.getMessage());
-//		} catch (InterruptedException e) {
-//			Client.Log("Reset Failure. Thread interrupted. %s", e.getMessage());
-//		}
-//	}
-
 	private byte getChannelOptionMask() {
 		int optionMask = 0b0000;
 		if (useOnTrade) {
