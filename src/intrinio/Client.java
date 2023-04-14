@@ -505,10 +505,8 @@ public class Client implements WebSocket.Listener {
 			}
 			if (this.wsState.getLastReset().plusDays(5).compareTo(LocalDateTime.now()) >= 0) {
 				String token = this.fetchToken();
-				//resetWebSocket(token);
 				initializeWebSocket(token);
 			} else {
-				//resetWebSocket(this.token.get().token());
 				initializeWebSocket(this.token.get().token());
 			}
 			return false;
