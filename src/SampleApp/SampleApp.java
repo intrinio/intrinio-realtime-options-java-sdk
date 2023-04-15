@@ -99,10 +99,10 @@ public class SampleApp {
 			client.start();
 			
 			// Use this to subscribe to a static list of symbols (option contracts) provided in config.json
-			//client.join();
+			client.join();
 			
 			// Use this to subscribe to the entire univers of symbols (option contracts). This requires special permission.
-			client.joinLobby();
+			//client.joinLobby();
 
 			// Use this to subscribe, dynamically, to an option chain (all option contracts for a given underlying symbol).
 			//client.join("AAPL");
