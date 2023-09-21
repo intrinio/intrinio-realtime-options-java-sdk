@@ -1,23 +1,18 @@
 package intrinio;
 
 enum PriceType {
-    One                 (0x00),
-    Ten                 (0x01),
-    Hundred             (0x02),
-    Thousand            (0x03),
-    TenThousand         (0x04),
-    HundredThousand     (0x05),
-    Million             (0x06),
-    TenMillion          (0x07),
-    HundredMillion      (0x08),
-    Billion             (0x09),
-    FiveHundredTwelve   (0x0A),
-    Zero                (0x0F);
-
-    private final int typeIndex;
-    PriceType(int typeIndex) {
-        this.typeIndex = typeIndex;
-    }
+    One,
+    Ten,
+    Hundred,
+    Thousand,
+    TenThousand,
+    HundredThousand,
+    Million,
+    TenMillion,
+    HundredMillion,
+    Billion,
+    FiveHundredTwelve,
+    Zero;
 
     static PriceType fromInt(int b){
         switch (b){

@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public record Trade(String contract, double price, long size, double timestamp, long totalVolume, double askPriceAtExecution, double bidPriceAtExecution, double underlyingPriceAtExecution) {
+public record Trade(String contract, Exchange exchange, double price, long size, double timestamp, long totalVolume, Qualifiers qualifiers, double askPriceAtExecution, double bidPriceAtExecution, double underlyingPriceAtExecution) {
 	private static String formatContract(String functionalContract){
 		//Transform from server format to normal format
 		//From this: AAPL_201016C100.00 or ABC_201016C100.003
@@ -63,12 +63,14 @@ public record Trade(String contract, double price, long size, double timestamp, 
 	}
 	
 	public String toString() {
-		return String.format("Trade (Contract: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
+		return String.format("Trade (Contract: %s, Exchange: %s, Price: %s, Size: %s, Timestamp: %s, TotalVolume: %s, Qualifiers: %s, AskPriceAtExecution: %s, BidPriceAtExecution: %s, UnderlyingPriceAtExecution: %s)",
 				this.contract,
+				this.exchange,
 				this.price,
 				this.size,
 				this.timestamp,
 				this.totalVolume,
+				this.qualifiers,
 				this.askPriceAtExecution,
 				this.bidPriceAtExecution,
 				this.underlyingPriceAtExecution);
@@ -88,7 +90,8 @@ public record Trade(String contract, double price, long size, double timestamp, 
 		// ask price at execution [49-52]
 		// bid price at execution [53-56]
 		// underlying price at execution [57-60]
-
+		// qualifiers [61-64]
+		// exchange [65]
 		String contract = StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(bytes, 1, bytes[0])).toString();
 
 		PriceType scaler = PriceType.fromInt(bytes[23]);
@@ -123,7 +126,11 @@ public record Trade(String contract, double price, long size, double timestamp, 
 		underlyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underlyingPriceAtExecutionBuffer.getInt());
 		
-		return new Trade(Trade.formatContract(contract), price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
+		Qualifiers qualifiers = new Qualifiers(bytes[61], bytes[62], bytes[63], bytes[64]);
+		
+		Exchange exchange = Exchange.valueOfCode(bytes[65]);
+		
+		return new Trade(Trade.formatContract(contract), exchange, price, size, timestamp, totalVolume, qualifiers, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
 	}
 	
 	public static Trade parse(ByteBuffer bytes) {
@@ -140,6 +147,8 @@ public record Trade(String contract, double price, long size, double timestamp, 
 		// ask price at execution [49-52]
 		// bid price at execution [53-56]
 		// underlying price at execution [57-60]
+		// qualifiers [61-64]
+		// exchange [65]
 
 		String contract = StandardCharsets.US_ASCII.decode(bytes.slice(1, bytes.get(0))).toString();
 
@@ -174,8 +183,12 @@ public record Trade(String contract, double price, long size, double timestamp, 
 		ByteBuffer underyingPriceAtExecutionBuffer = bytes.slice(57, 4);
 		underyingPriceAtExecutionBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		double underlyingPriceAtExecution = underlyingScaler.getScaledValue(underyingPriceAtExecutionBuffer.getInt());
+		
+		Qualifiers qualifiers = new Qualifiers(bytes.get(61), bytes.get(62), bytes.get(63), bytes.get(64));
+		
+		Exchange exchange = Exchange.valueOfCode(bytes.get(65));
 
-		return new Trade(Trade.formatContract(contract), price, size, timestamp, totalVolume, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
+		return new Trade(Trade.formatContract(contract), exchange, price, size, timestamp, totalVolume, qualifiers, askPriceAtExecution, bidPriceAtExecution, underlyingPriceAtExecution);
 	}
 	
 }
