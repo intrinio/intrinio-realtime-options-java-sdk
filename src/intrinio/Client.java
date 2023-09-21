@@ -31,7 +31,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class Client implements WebSocket.Listener {
 	//region Final data members
-	private final String EMPTY_STRING = "";
 	private final String FIREHOSE_CHANNEL = "$FIREHOSE";
 	private final long[] selfHealBackoffs = {1000, 30000, 60000, 300000, 600000};
 	private final int TRADE_MESSAGE_SIZE = 72; //61 used + 11 pad
@@ -50,7 +49,6 @@ public class Client implements WebSocket.Listener {
 	//region Data Members
 	private Config config;
 	private Thread[] processDataThreads;
-	private Thread heartbeatThread;
 	private boolean isCancellationRequested = false;
 	private AtomicReference<Token> token = new AtomicReference<Token>(new Token(null, LocalDateTime.now()));
 	private AtomicLong dataMsgCount = new AtomicLong(0l);
@@ -361,36 +359,11 @@ public class Client implements WebSocket.Listener {
 		}
 	}
 
-	private void heartbeat(){
-		while (!this.isCancellationRequested) {
-			try {
-				Thread.sleep(20000);
-				wsLock.readLock().lock();
-				try {
-					if (this.wsState != null && this.wsState.isReady()) {
-						WebSocket socket = this.wsState.getWebSocket();
-						if (socket != null){
-							socket.sendText(EMPTY_STRING, true);
-						}
-					}
-				} finally {
-					wsLock.readLock().unlock();
-				}
-			} catch (InterruptedException e) {
-				//Client.Log("Websocket - Heartbeat Interrupted  - %s", e.getMessage());
-			} catch (Exception e) {
-				Client.Log("Websocket - Heartbeat Error - %s", e.getMessage());
-			}
-		}
-	}
-
 	private void startThreads() throws Exception {
 		this.isCancellationRequested = false;
-		this.heartbeatThread = new Thread(() -> heartbeat());
 		for (int i = 0; i < processDataThreads.length; i++) {
 			processDataThreads[i] = new Thread(()->processData());
 		}
-		heartbeatThread.start();
 		for (Thread thread : processDataThreads) {
 			thread.start();
 		}
@@ -401,11 +374,6 @@ public class Client implements WebSocket.Listener {
 		try {
 			Thread.sleep(1000);
 		}catch (Exception e){}
-
-		try {
-			this.heartbeatThread.join();
-		}catch (Exception e){}
-
 		for (Thread thread : processDataThreads) {
 			try {
 				thread.join();
@@ -563,7 +531,11 @@ public class Client implements WebSocket.Listener {
 		}
 		URL url = null;
 		try {
-			url = new URL(authUrl);
+			URI uri = new URI(authUrl);
+			url = uri.toURL();
+		} catch (URISyntaxException e) {
+			Client.Log("Authorization Failure. Bad URI (%s). %s", authUrl, e.getMessage());
+			return false;
 		} catch (MalformedURLException e) {
 			Client.Log("Authorization Failure. Bad URL (%s). %s", authUrl, e.getMessage());
 			return false;
@@ -571,7 +543,7 @@ public class Client implements WebSocket.Listener {
 		HttpURLConnection con;
 		try {
 			con = (HttpURLConnection) url.openConnection();
-			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv3.2");
+			con.setRequestProperty("Client-Information", "IntrinioRealtimeOptionsJavaSDKv3.3");
 		} catch (IOException e) {
 			Client.Log("Authorization Failure. Please check your network connection. " + e.getMessage());
 			return false;
