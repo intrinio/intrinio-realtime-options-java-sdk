@@ -1,4 +1,5 @@
 # Intrinio Java SDK for Real-Time Option Prices
+DEPRECATED - merged into [this repository](https://github.com/intrinio/intrinio-realtime-java-sdk)
 SDK for working with Intrinio's realtime options feed via WebSocket
 
 [Intrinio](https://intrinio.com/) provides real-time stock option prices via a two-way WebSocket connection. To get started, [subscribe to a real-time data feed](https://intrinio.com/financial-market-data/options-data) and follow the instructions below.
